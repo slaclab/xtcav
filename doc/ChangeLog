@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-02
+2014-10-24 Christopher O'Grady
+- Move Dark/LasingOff scripts from app/ to examples/
+
 Tag: V00-00-01
 2014-10-24 Christopher O'Grady
 - Initial tag

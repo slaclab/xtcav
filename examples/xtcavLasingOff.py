@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from xtcav.GenerateLasingOffReference import *
 
 GLOC=GenerateLasingOffReference();

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from xtcav.GenerateDarkBackground import *
 
 GDB=GenerateDarkBackground();
