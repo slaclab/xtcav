@@ -2,11 +2,14 @@ from psana import *
 from PSCalib.CalibFileFinder import CalibFileFinder
 
 class CalibrationPaths:
-    def __init__(self,datasource):
+    def __init__(self,datasource,calibdir=''):
         self.ds = datasource
         self.calibgroup = 'Xtcav::CalibV1'
         self.src  = 'XrayTransportDiagnostic.0:Opal1000.0'
-        self.cdir = self.ds.env().calibDir()
+        if len(calibdir)==0:
+            self.cdir = self.ds.env().calibDir()
+        else:
+            self.cdir = calibdir
 
     def findCalFileName(self,type,rnum):
         """

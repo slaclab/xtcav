@@ -8,17 +8,24 @@ import numpy as np
 import glob
 import sys
 import getopt
-import xtcav.Utils as xtu
-from xtcav.DarkBackground import *
-from xtcav.CalibrationPaths import *
+import warnings
+import Utils as xtu   #HACK
+from DarkBackground import *
+from CalibrationPaths import *
 
 
 class GenerateDarkBackground(object):
     def __init__(self):
+    
+        #Handle warnings
+        warnings.filterwarnings('always',module='Utils',category=UserWarning)
+        warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
+        
         self._experiment='amoc8114'
         self._maxshots=100
         self._runs='85'
         self._validityrange=[]
+        self._calpath=''
                        
     def Generate(self):
         print 'dark background reference'
@@ -37,10 +44,6 @@ class GenerateDarkBackground(object):
         configStore=dataSource.env().configStore();
         epicsStore=dataSource.env().epicsStore();
 
-        #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
-        ebeam_data=psana.Source('BldInfo(EBeam)')
-        ebeam_type=psana.Bld.BldDataEBeamV4
-
         n=0  #Counter for the total number of xtcav images processed
          
         runs=numpy.array([],dtype=int) #Array that contains the run processed run numbers
@@ -53,8 +56,6 @@ class GenerateDarkBackground(object):
             
             for e, evt in enumerate(dataSource.events()):
             
-                ebeam = evt.get(ebeam_type,ebeam_data)    
-
                 if not 'ROI_XTCAV' in locals():   #After the first event the epics store should contain the ROI of the xtcav images, that let us get the x and y vectors
                     ROI_XTCAV,ok=xtu.GetXTCAVImageROI(epicsStore)             
                     if not ok: #If the information is not good, we try next event
@@ -88,7 +89,7 @@ class GenerateDarkBackground(object):
         else:
             validityrange=self._validityrange
             
-        cp=CalibrationPaths(dataSource)
+        cp=CalibrationPaths(dataSource,self._calpath)
         file=cp.newCalFileName('pedestals',validityrange[0],validityrange[1])
         
         db.Save(file)
@@ -114,5 +115,11 @@ class GenerateDarkBackground(object):
         return self._runs
     @runs.setter
     def runs(self, runs):
-        self._runs = runs
+        self._runs = runs       
+    @property
+    def calibrationpath(self):
+        return self._calpath
+    @calibrationpath.setter
+    def calibrationpath(self, calpath):
+        self._calpath = calpath
 

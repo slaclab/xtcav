@@ -8,6 +8,7 @@ import scipy.interpolate
 #import scipy.stats.mstats 
 import psana
 
+import warnings
 import scipy.ndimage as im 
 import scipy.io
 import math
@@ -153,7 +154,7 @@ def DenoiseImage(image,medianfilter,snrfilter):
     if(np.sum(image)>0):
         image=image/np.sum(image)
     else:
-        print 'Image Completely Empty'
+        warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
         ok=0
         
     return image,ok
@@ -223,7 +224,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     NB=len(imageStats)              #Number of bunches
     
     if (NB!=nolasingAveragedProfiles['NB']):
-        print 'Different number of bunches in the reference'
+        warnings.warn_explicit('Different number of bunches in the reference',UserWarning,'XTCAV',0)
     
     t=nolasingAveragedProfiles['t']   #Master time obtained from the no lasing references
     dt=(t[-1]-t[0])/(t.size-1)
@@ -686,22 +687,32 @@ def GetGlobalXTCAVCalibration(epicsStore):
 #   ok: if all the data was retrieved correctly
 
     ok=1
+
     umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
-    strstrength=epicsStore.value('OTRS:DMP1:695:TCAL_X')
-    rfampcalib=epicsStore.value('SIOC:SYS0:ML01:AO214')
-    rfphasecalib=epicsStore.value('SIOC:SYS0:ML01:AO215')
-    dumpe=epicsStore.value('REFS:DMP1:400:EDES')
-    dumpdisp=epicsStore.value('SIOC:SYS0:ML01:AO216')
+    strstrength=epicsStore.value('Streak_Strength')
+    rfampcalib=epicsStore.value('XTCAV_Cal_Amp')
+    rfphasecalib=epicsStore.value('XTCAV_Cal_Phase')
+    dumpe=epicsStore.value('Dump_Energy')
+    dumpdisp=epicsStore.value('Dump_Disp')
+        
+    #Try old values     
+    if strstrength==None:                #Try old values    
+        umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
+        strstrength=epicsStore.value('OTRS:DMP1:695:TCAL_X')
+        rfampcalib=epicsStore.value('SIOC:SYS0:ML01:AO214')
+        rfphasecalib=epicsStore.value('SIOC:SYS0:ML01:AO215')
+        dumpe=epicsStore.value('REFS:DMP1:400:EDES')
+        dumpdisp=epicsStore.value('SIOC:SYS0:ML01:AO216')
     
-    if umperpix==None:              #Some hardcoded values
-        print 'No XTCAV Calibration'
-        ok=0
-        umperpix=35.47
-        strstrength=48.2406251901
-        rfampcalib=20
-        rfphasecalib=180
-        dumpdisp=0.56376747213
-        dumpe=3.442
+        if strstrength==None:                #Some hardcoded values
+            warnings.warn_explicit('No XTCAV Calibration',UserWarning,'XTCAV',0)
+            ok=0
+            umperpix=35.47
+            strstrength=48.2406251901
+            rfampcalib=20
+            rfphasecalib=180
+            dumpdisp=0.56376747213
+            dumpe=3.442
              
     globalCalibration={
         'umperpix':umperpix, #Pixel size of the XTCAV camera
@@ -725,19 +736,25 @@ def GetXTCAVImageROI(epicsStore):
 #   ok: if all the data was retrieved correctly
 
     ok=1
-    roiX=epicsStore.value('OTRS:DMP1:695:MinX')
-    roiY=epicsStore.value('OTRS:DMP1:695:MinY')
-    roiXN=epicsStore.value('OTRS:DMP1:695:SizeX')
-    roiYN=epicsStore.value('OTRS:DMP1:695:SizeY')
     
-    
-    if roiX==None:           #Some hardcoded values
-        print 'No XTCAV ROI info'
-        ok=0
-        roiX=0                                  
-        roiY=0
-        roiXN=1024
-        roiYN=1024
+    roiXN=epicsStore.value('ROI_X_Length')
+    roiX=epicsStore.value('ROI_X_Offset')
+    roiYN=epicsStore.value('ROI_Y_Length')
+    roiY=epicsStore.value('ROI_Y_Offset')
+            
+    if roiX==None:           #Try old values        
+        roiX=epicsStore.value('OTRS:DMP1:695:MinX')
+        roiY=epicsStore.value('OTRS:DMP1:695:MinY')
+        roiXN=epicsStore.value('OTRS:DMP1:695:SizeX')
+        roiYN=epicsStore.value('OTRS:DMP1:695:SizeY')
+                       
+        if roiX==None: #Some hardcoded values        
+            warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
+            ok=0
+            roiX=0                                  
+            roiY=0
+            roiXN=1024
+            roiYN=1024
 
     x=roiX+np.arange(0, roiXN)
     y=roiY+np.arange(0, roiYN)
@@ -769,7 +786,7 @@ def ShotToShotParameters(ebeam,gasdetector):
         xtcavrfphase=ebeam.ebeamXTCAVPhase()
         dumpecharge=ebeam.ebeamDumpCharge()*echarge #In C        
     else:    #Some hardcoded values
-        print 'No ebeamv5 info'
+        warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
         ok=0
         ebeamcharge=5
         xtcavrfamp=20
@@ -780,7 +797,7 @@ def ShotToShotParameters(ebeam,gasdetector):
     if gasdetector:
         energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2    
     else:   #Some hardcoded values
-        print 'No gas detector info'
+        warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
         ok=0
         energydetector=0.2;
         

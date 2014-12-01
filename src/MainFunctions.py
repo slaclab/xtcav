@@ -763,7 +763,7 @@ def GetXTCAVImageROI(epicsStore):
     
     
     if roiX==None:           #Some hardcoded values
-        print 'No XTCAV ROI info'
+        print 'No XTCAV ROI info, no'
         ok=0
         roiX=0                                  
         roiY=0

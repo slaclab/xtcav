@@ -11,14 +11,20 @@ import pdb
 import IPython
 import sys
 import getopt
-import xtcav.Utils as xtu
-from xtcav.DarkBackground import *
-from xtcav.LasingOffReference import *
-from xtcav.CalibrationPaths import *
+import warnings
+import Utils as xtu
+from DarkBackground import *
+from LasingOffReference import *
+from CalibrationPaths import *
 
 class GenerateLasingOffReference(object):
 
     def __init__(self):
+    
+        #Handle warnings
+        warnings.filterwarnings('always',module='Utils',category=UserWarning)
+        warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
+    
         #Some default values for the options
         self._experiment='amoc8114'     #Experiment label
         self._maxshots=401              #Maximum number of valid shots to process
@@ -31,6 +37,7 @@ class GenerateLasingOffReference(object):
         self._snrfilter=10              #Number of sigmas for the noise threshold
         self._roiwaistthres=0.2         #Parameter for the roi location
         self._roiexpand=2.5             #Parameter for the roi location
+        self._calpath=''
 
     def Generate(self):
         
@@ -50,11 +57,9 @@ class GenerateLasingOffReference(object):
 
         #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
         ebeam_data=psana.Source('BldInfo(EBeam)')
-        ebeam_type=psana.Bld.BldDataEBeamV5
 
         #Gas detectors for the pulse energies
         gasdetector_data=psana.Source('BldInfo(FEEGasDetEnergy)')
-        gasdetector_type=psana.Bld.BldDataFEEGasDetEnergy
 
         #Stores for environment variables   
         epicsStore = dataSource.env().epicsStore();
@@ -73,8 +78,11 @@ class GenerateLasingOffReference(object):
             runs = numpy.append(runs,run.run());
             n_r=0 #Counter for the total number of xtcav images processed within the run        
             for e, evt in enumerate(run.events()):
-                ebeam = evt.get(ebeam_type,ebeam_data)        
-                gasdetector=evt.get(gasdetector_type,gasdetector_data) 
+                ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)        
+                if not ebeam:
+                    ebeam = evt.get(psana.Bld.BldDataEBeamV5,ebeam_data)
+                
+                gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,gasdetector_data) 
                 
                 #After the first event the epics store should contain the ROI of the xtcav images and the calibration of the XTCAV
                 if not 'ROI_XTCAV' in locals(): 
@@ -90,9 +98,17 @@ class GenerateLasingOffReference(object):
                 #If we have not loaded the dark background information yet, we do
                 if not 'db' in locals():
                     if not self._darkreferencepath:
-                        cp=CalibrationPaths(dataSource)       
+                        cp=CalibrationPaths(dataSource,self._calpath)       
                         self._darkreferencepath=cp.findCalFileName('pedestals',evt.run())
-                    db=DarkBackground.Load(self._darkreferencepath)
+                        
+                    if not self._darkreferencepath:
+                        print ('Dark reference for run %d not found, image will not be background substracted' % evt.run())
+                        self._loadeddarkreference=False 
+                        db=False
+                    else                        
+                        db=DarkBackground.Load(self._darkreferencepath)
+        
+                    
                 
                               
                 frame = evt.get(xtcav_type, xtcav_camera) 
@@ -104,10 +120,14 @@ class GenerateLasingOffReference(object):
                         continue
                         
                     shotToShot,ok = xtu.ShotToShotParameters(ebeam,gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
-                    #if not ok: #If the information is not good, we skip the event
-                        #continue
-                                        
-                    img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) #Subtract the dark background, taking into account properly possible different ROIs
+                    if not ok: #If the information is not good, we skip the event
+                        continue
+                    
+                    #Subtract the dark background, taking into account properly possible different ROIs, if it is available
+                    if db:        
+                        img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) 
+                    else:
+                        ROI=ROI_XTCAV
                     img,ok=xtu.DenoiseImage(img,self._medianfilter,self._snrfilter)                    #Remove noise from the image and normalize it
                     if not ok:                                        #If there is nothing in the image we skip the event  
                         continue
@@ -152,7 +172,7 @@ class GenerateLasingOffReference(object):
         else:
             validityrange=self._validityrange
             
-        cp=CalibrationPaths(dataSource)
+        cp=CalibrationPaths(dataSource,self._calpath)
         file=cp.newCalFileName('lasingoffreference',validityrange[0],validityrange[1])
                 
         lor.Save(file)
@@ -216,4 +236,10 @@ class GenerateLasingOffReference(object):
     @roiexpand.setter
     def roiexpand(self, roiexpand):
         self._roiexpand = roiexpand
+    @property
+    def calibrationpath(self):
+        return self._calpath
+    @calibrationpath.setter
+    def calibrationpath(self, calpath):
+        self._calpath = calpath
     
