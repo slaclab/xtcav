@@ -21,11 +21,12 @@ for r,run in enumerate(dataSource.runs()):
         if not XTCAVRetrieval.SetCurrentEvent(evt):
             continue
 
-        t,power=XTCAVRetrieval.XRayPower()  
-        agreement=XTCAVRetrieval.ReconstructionAgreement()      
+        t,power,ok1=XTCAVRetrieval.XRayPower()  
+        agreement,ok2=XTCAVRetrieval.ReconstructionAgreement()      
 
-        print "%d/%d" % (n_r,maxshots) #Debugging purposes, will be removed
-        print 'Agreement: %g %% Maximum power: %g GW' %(agreement*100,np.amax(power))
+        if (ok1 and ok2):
+            print "%d/%d" % (n_r,maxshots) #Debugging purposes, will be removed
+            print 'Agreement: %g %% Maximum power: %g GW' %(agreement*100,np.amax(power))
 
         n_r=n_r+1            
 
