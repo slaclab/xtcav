@@ -322,6 +322,7 @@ class ShotToShotCharacterization(object):
 
         return t,self._eventresultsstep3['powerERMS'],True   
         
+
     def XRayPowerCOMBased(self):   
         
         t=[]
@@ -338,6 +339,38 @@ class ShotToShotCharacterization(object):
             t[j,:]=mastert+self._eventresultsstep3['bunchdelay'][j]
 
         return t,self._eventresultsstep3['powerECOM'],True  
+        
+    def XRayEnergyPerBunch(self):   
+        
+        energies=[]
+            
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return energies,False
+       
+        return (self._eventresultsstep3['lasingenergyperbunchECOM']+self._eventresultsstep3['lasingenergyperbunchERMS'])/2,True  
+        
+    def XRayEnergyPerBunchCOMBased(self):   
+        
+        energies=[]
+            
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return energies,False
+       
+        return self._eventresultsstep3['lasingenergyperbunchECOM'],True  
+    
+    def XRayEnergyPerBunchRMSBased(self):   
+        
+        energies=[]
+            
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return energies,False
+       
+        return self._eventresultsstep3['lasingenergyperbunchERMS'],True          
+        
+        
         
     def RawXTCAVImage(self):                  
         if not self._currenteventavailable:
