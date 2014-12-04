@@ -96,7 +96,6 @@ class ShotToShotCharacterization(object):
             self.LoadDefaultProcessingParameters()            
             self._loadedlasingoffreference=False
             return False
-        
         self._lasingoffreference=LasingOffReference.Load(self._lasingoffreferencepath)
         self._loadedlasingoffreference=True
                                 

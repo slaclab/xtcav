@@ -742,7 +742,7 @@ def GetXTCAVImageROI(epicsStore):
     roiYN=epicsStore.value('ROI_Y_Length')
     roiY=epicsStore.value('ROI_Y_Offset')
             
-    if roiX==None:           #Try old values        
+    if roiX==None:           #Try old values      
         roiX=epicsStore.value('OTRS:DMP1:695:MinX')
         roiY=epicsStore.value('OTRS:DMP1:695:MinY')
         roiXN=epicsStore.value('OTRS:DMP1:695:SizeX')
@@ -758,14 +758,14 @@ def GetXTCAVImageROI(epicsStore):
 
     x=roiX+np.arange(0, roiXN)
     y=roiY+np.arange(0, roiYN)
-    
+        
     ROI={
         'x' :x,                 #X vector
         'y' :y,                 #Y vector
         'x0' :roiX,             #Position of the first pixel in x
         'y0' :roiY,             #Position of the first pixel in y
         'xN' :roiXN,            #Size of the image in X
-        'yN' :roiYN};           #Size of the image in Y
+        'yN' :roiYN};           #Size of the image in Y 
            
     return ROI,ok
     

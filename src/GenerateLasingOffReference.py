@@ -105,7 +105,7 @@ class GenerateLasingOffReference(object):
                         print ('Dark reference for run %d not found, image will not be background substracted' % evt.run())
                         self._loadeddarkreference=False 
                         db=False
-                    else                        
+                    else:
                         db=DarkBackground.Load(self._darkreferencepath)
         
                     
