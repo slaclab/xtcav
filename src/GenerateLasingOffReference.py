@@ -18,6 +18,23 @@ from LasingOffReference import *
 from CalibrationPaths import *
 
 class GenerateLasingOffReference(object):
+    """
+    Class that generates a lasing off references for XTCAV reconstruction purposes
+    Attributes:
+        experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
+        runs (str): String with a run number, or a run interval. E.g. '123'  '134-156' 145,136'
+        maxshots (int): Maximum number of images to use for the references.
+        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
+        nb (int): Number of bunches.
+        medianfilter (int): Number of neighbours for median filter.
+        snrfilter (float): Number of sigmas for the noise threshold.
+        groupsize (int): Number of profiles to average together for each reference.
+        roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
+        roiexpand (float): number of waists that the region of interest around will span around the center of the trace.
+
+    """
+        
+
 
     def __init__(self):
     
@@ -40,7 +57,9 @@ class GenerateLasingOffReference(object):
         self._calpath=''
 
     def Generate(self):
-        
+        """
+        After setting all the parameters, this method has to be called to generate the lasing off reference and save it in the proper location. It not set, the validity range for the reference will go from the first run number used to generate the reference and the last run.
+        """
         print 'Lasing off reference'
         print '\t Experiment: %s' % self._experiment
         print '\t Runs: %s' % self._runs
@@ -179,6 +198,13 @@ class GenerateLasingOffReference(object):
         
         
     def SetValidityRange(self,runBegin,runEnd='end'):
+        """Sets the validity range for the generated reference.
+
+        Args:
+            runBegin (int): First run in the range.
+            runEnd (int or str): Last run in the range (use 'end' to leave the range open)..
+
+        """
         self._validityrange=[runBegin, runEnd];
         
     #Access to the different properties: here we can change flags when a parameter is changed, or check the validity of the property
@@ -232,7 +258,7 @@ class GenerateLasingOffReference(object):
         self._roiwaistthres = roiwaistthres
     @property
     def roiexpand(self):
-        return self._groupsize
+        return self._roiexpand
     @roiexpand.setter
     def roiexpand(self, roiexpand):
         self._roiexpand = roiexpand

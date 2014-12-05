@@ -15,6 +15,15 @@ from CalibrationPaths import *
 
 
 class GenerateDarkBackground(object):
+    """
+    Class that generates a dark background image for XTCAV reconstruction purposes
+    Attributes:
+        experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
+        runs (str): String with a run number, or a run interval. E.g. '123'  '134-156' 145,136'
+        maxshots (int): Maximum number of images to use for the reference.
+        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
+    """
+
     def __init__(self):
     
         #Handle warnings
@@ -28,6 +37,9 @@ class GenerateDarkBackground(object):
         self._calpath=''
                        
     def Generate(self):
+        """
+        After setting all the parameters, this method has to be called to generate the dark reference and save it in the proper location. It not set, the validity range for the reference will go from the first run number used to generate the reference and the last run.
+        """
         print 'dark background reference'
         print '\t Experiment: %s' % self._experiment
         print '\t Runs: %s' % self._runs
@@ -95,6 +107,13 @@ class GenerateDarkBackground(object):
         db.Save(file)
         
     def SetValidityRange(self,runBegin,runEnd='end'):
+        """Sets the validity range for the generated reference.
+
+        Args:
+            runBegin (int): First run in the range.
+            runEnd (int or str): Last run in the range (use 'end' to leave the range open)..
+
+        """
         self._validityrange=[runBegin, runEnd];
     
     #Access to the different properties: here we can change flags when a parameter is changed, or check the validity of the property

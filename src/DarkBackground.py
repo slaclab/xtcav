@@ -1,8 +1,5 @@
 
-import scipy.io
-import cPickle
 import numpy
-from xtcav.CustomLoadmat import customloadmat
 from xtcav.Constants import Load as constLoad
 from xtcav.Constants import Save as constSave
 

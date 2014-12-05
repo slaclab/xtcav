@@ -16,12 +16,14 @@ import IPython
 
 
 def ProcessXTCAVImage(image,ROI):
-#Obtain the statistics (profiles, center of mass, etc) of an xtcav image. 
-#Arguments:
-#   image: 3d numpy array where the first index always has one dimension (it will become the bunch index), the second index correspond to y, and the third index corresponds to x
-#   ROI: region of interest of the image, contain x and y axis
-#Output
-#   imageStats: list with the image statistics for each bunch in the image
+"""
+Obtain the statistics (profiles, center of mass, etc) of an xtcav image. 
+Arguments:
+  image: 3d numpy array where the first index always has one dimension (it will become the bunch index), the second index correspond to y, and the third index corresponds to x
+  ROI: region of interest of the image, contain x and y axis
+Output
+  imageStats: list with the image statistics for each bunch in the image
+"""
         
     #obtain the number of bunches for the image. In principle this should be equal to n    
     nb=image.shape[0];
@@ -34,12 +36,14 @@ def ProcessXTCAVImage(image,ROI):
     return imageStats
     
 def GetCenterOfMass(image,x,y):
-#Gets the center of mass of an image 
-#Arguments:
-#   image: 2d numpy array where the firs index correspond to y, and the second index corresponds to x
-#   x,y: vectors of the image
-#Output
-#   x0,y0 coordinates of the center of mass 
+"""
+Gets the center of mass of an image 
+Arguments:
+  image: 2d numpy array where the firs index correspond to y, and the second index corresponds to x
+  x,y: vectors of the image
+Output
+  x0,y0 coordinates of the center of mass 
+"""
   
     profilex=np.sum(image,0);     
     x0=np.dot(profilex,np.transpose(x))/np.sum(profilex)
@@ -50,12 +54,14 @@ def GetCenterOfMass(image,x,y):
     
     
 def GetImageStatistics(image,x,y):
-#Obtain all the statistics (profiles, center of mass, etc) of an image
-#Arguments:
-#   image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
-#   x,y: vectors of the image
-#Output
-#   imageStats: struct that contains the different statistics, including the center of mass 
+"""
+Obtain all the statistics (profiles, center of mass, etc) of an image
+Arguments:
+  image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
+  x,y: vectors of the image
+Output
+  imageStats: struct that contains the different statistics, including the center of mass 
+"""
 
     imFrac=np.sum(image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
 
@@ -103,14 +109,16 @@ def GetImageStatistics(image,x,y):
     return imageStats
     
 def SubtractBackground(image,ROI,image_db,ROI_db):
-#Obtain all the statistics (profiles, center of mass, etc) of an image
-#Arguments:
-#   image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
-#   ROI: region of interest of the input image
-#   darkbg: struct with the dark background image and its ROI
-#Output
-#   image: image after subtracting the background
-#   ROI: region of interest of the ouput image
+"""
+Obtain all the statistics (profiles, center of mass, etc) of an image
+Arguments:
+  image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
+  ROI: region of interest of the input image
+  darkbg: struct with the dark background image and its ROI
+Output
+  image: image after subtracting the background
+  ROI: region of interest of the ouput image
+"""
     
     #This only contemplates the case when the ROI of the darkbackground is larger than the ROI of the image. Other cases should be contemplated in the future
     minX=ROI['x0']-ROI_db['x0'];
@@ -124,14 +132,16 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
 
     
 def DenoiseImage(image,medianfilter,snrfilter):
-#Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
-#Arguments:
-#   image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
-#   medianfilter: number of neighbours for the median filter
-#   SNR_border: number of pixels near the border that can be considered to contain just noise
-#Output
-#   image: filtered image
-#   ok: true if there is something in the image
+"""
+Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
+Arguments:
+  image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
+  medianfilter: number of neighbours for the median filter
+  SNR_border: number of pixels near the border that can be considered to contain just noise
+Output
+  image: filtered image
+  ok: true if there is something in the image
+"""
 
     SNR_border=100
 
@@ -160,15 +170,17 @@ def DenoiseImage(image,medianfilter,snrfilter):
     return image,ok
 
 def FindROI(image,ROI,threshold,expandfactor):
-#Find the subroi of the image
-#Arguments:
-#   image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
-#   ROI: region of interest of the input image
-#   threshold: fraction of one that will set where the signal has dropped enough from the maximum to consider it to be the width the of trace
-#   expandfactor: factor that will increase the calculated width from the maximum to where the signal drops to threshold
-#Output
-#   cropped: 2d numpy array with the cropped image where the first index correspond to y, and the second index corresponds to x
-#   outROI: region of interest of the output image
+"""
+Find the subroi of the image
+Arguments:
+  image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
+  ROI: region of interest of the input image
+  threshold: fraction of one that will set where the signal has dropped enough from the maximum to consider it to be the width the of trace
+  expandfactor: factor that will increase the calculated width from the maximum to where the signal drops to threshold
+Output
+  cropped: 2d numpy array with the cropped image where the first index correspond to y, and the second index corresponds to x
+  outROI: region of interest of the output image
+"""
 
     #For the cropping on each direction we use the profile on each direction
     profileX=image.sum(0)
@@ -212,14 +224,16 @@ def FindROI(image,ROI,threshold,expandfactor):
     return cropped,outROI
 
 def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
-#Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
-#Arguments:
-#   PU: physical units of the profiles
-#   imageStats: statistics of the xtcav image (profiles)
-#   shotToShot: structure with the shot information
-#   nolasingAveragedProfiles: no lasing reference profiles
-#Output
-#   pulsecharacterization: retrieved pulse
+"""
+Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
+Arguments:
+  PU: physical units of the profiles
+  imageStats: statistics of the xtcav image (profiles)
+  shotToShot: structure with the shot information
+  nolasingAveragedProfiles: no lasing reference profiles
+Output
+  pulsecharacterization: retrieved pulse
+"""
 
     NB=len(imageStats)              #Number of bunches
     
@@ -356,15 +370,17 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     return pulsecharacterization
     
 def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,globalCalibration,shotsPerGroup):
-#Find the subroi of the image
-#Arguments:
-#   listROI: list with the axis for all the XTCAV non lasing profiles to average
-#   listImageStats: list of the statistics (profiles) for all the XTCAV non lasing profiles to average
-#   listShotToShot: list of the shot to shot properties structures for each profile
-#   globalCalibration: global calibration structure for xtcav
-#   shotsPerGroup
-#Output
-#   averagedProfiles: list with the averaged reference of the reference for each group 
+"""
+Find the subroi of the image
+Arguments:
+  listROI: list with the axis for all the XTCAV non lasing profiles to average
+  listImageStats: list of the statistics (profiles) for all the XTCAV non lasing profiles to average
+  listShotToShot: list of the shot to shot properties structures for each profile
+  globalCalibration: global calibration structure for xtcav
+  shotsPerGroup
+Output
+  averagedProfiles: list with the averaged reference of the reference for each group 
+"""
    
     N=len(listImageStats)           #Total number of profiles
     NB=len(listImageStats[0])       #Number of bunches
@@ -498,104 +514,16 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,globalCalib
         }
             
     return averagedProfiles
-    
-def AverageXTCAVProfiles(listROI,listImageStats,listShotToShot,globalCalibration):
-
-#Function that does the same as AverageXTCAVProfilesGroups without grouping, just averaging everything together, obsolete
-    N=len(listImageStats)
-    NB=len(listImageStats[0])
-            
-    listPU=[]
-    
-    
-    maxt=0
-    mint=0
-    mindt=100
-
-    for i in range(N):
-        PU=CalculatePhysicalUnits(listROI[i],[listImageStats[i][0]['xCOM'],listImageStats[i][0]['yCOM']],listShotToShot[i],globalCalibration)             
-        if PU['xfsPerPix']<0:
-            PU['xfs']=PU['xfs'][::-1]
-            for j in range(NB):
-                listImageStats[i][j]['xProfile']=listImageStats[i][j]['xProfile'][::-1]
-                listImageStats[i][j]['yCOMslice']=listImageStats[i][j]['yCOMslice'][::-1]
-                listImageStats[i][j]['yRMSslice']=listImageStats[i][j]['yRMSslice'][::-1]
-            
-                                   
-        listPU.append(PU)              
-        maxt=np.amax([maxt,np.amax(PU['xfs'])])
-        mint=np.amin([mint,np.amin(PU['xfs'])])
-        mindt=np.amin([mindt,np.abs(PU['xfsPerPix'])])
-                
-    dt=mindt/2
-
-    t=np.arange(mint,maxt+dt,dt)       
-      
-    averageTProfile=np.zeros((NB,len(t)), dtype=np.float64);
-    averageECOMslice=np.zeros((NB,len(t)), dtype=np.float64);
-    averageERMSslice=np.zeros((NB,len(t)), dtype=np.float64);
-    averageDistT=np.zeros(NB, dtype=np.float64);
-    averageDistE=np.zeros(NB, dtype=np.float64);
-    averageTRMS=np.zeros(NB, dtype=np.float64);
-    averageERMS=np.zeros(NB, dtype=np.float64); 
-    
-    for j in range(NB):
-        for i in range(N):                
-            distT=(listImageStats[i][j]['xCOM']-listImageStats[i][0]['xCOM'])*listPU[i]['xfsPerPix']
-            distE=(listImageStats[i][j]['yCOM']-listImageStats[i][0]['yCOM'])*listPU[i]['yMeVPerPix']
-            averageDistT[j]=averageDistT[j]+distT
-            averageDistE[j]=averageDistE[j]+distE
-            
-            averageTRMS[j]=averageTRMS[j]+listImageStats[i][j]['xRMS']*listPU[i]['xfsPerPix']
-            averageERMS[j]=averageTRMS[j]+listImageStats[i][j]['yRMS']*listPU[i]['yMeVPerPix']
-             
-            tProfile=listImageStats[i][j]['xProfile']
-            eCOMslice=(listImageStats[i][j]['yCOMslice']-listImageStats[i][j]['yCOM'])*listPU[i]['yMeVPerPix']
-            eRMSslice=listImageStats[i][j]['yRMSslice']*listPU[i]['yMeVPerPix']
-                
-            interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,tProfile,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)
-            averageTProfile[j,:]=averageTProfile[j,:]+interp(t);
-            #Renormalize so the total area is the same
-            dt_old=listPU[i]['xfs'][1]-listPU[i]['xfs'][0];
-            averageTProfile[j,:]=averageTProfile[j,:]+interp(t)*dt/dt_old;
-                                        
-            interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)
-            averageECOMslice[j,:]=averageECOMslice[j,:]+interp(t);
-            
-            interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)
-            averageERMSslice[j,:]=averageERMSslice[j,:]+interp(t);
-            
-                    
-        averageTProfile[j,:]=averageTProfile[j,:]/N
-        averageECOMslice[j,:]=averageECOMslice[j,:]/N    
-        averageERMSslice[j,:]=averageERMSslice[j,:]/N
-        averageDistT[j]=averageDistT[j]/N
-        averageDistE[j]=averageDistE[j]/N
-        averageTRMS[j]=averageTRMS[j]/N
-        averageERMS[j]=averageERMS[j]/N
-                
-    
-    averagedProfiles={
-        't':t,
-        'tProfile':averageTProfile,
-        'eCOMslice':averageECOMslice,
-        'eRMSslice':averageERMSslice,
-        'distT':averageDistT,
-        'distE':averageDistE,
-        'tRMS': averageTRMS,
-        'eRMS': averageERMS
-        }
-            
-    return averagedProfiles
-    
-    
+        
 def SaveLasingData(path,listPulses,runs,n):
-#Saves the list of the retrieved pulses
-#Arguments:
-#   path: full file path
-#   listPulses: list of the retrieved pulses
-#   runs: list if the runs used
-#   n: total number of accumulated images
+"""
+Saves the list of the retrieved pulses
+Arguments:
+  path: full file path
+  listPulses: list of the retrieved pulses
+  runs: list if the runs used
+  n: total number of accumulated images
+"""
     output = {}
     output['lasing'] = {
         'pulses':listPulses,
@@ -605,12 +533,14 @@ def SaveLasingData(path,listPulses,runs,n):
     scipy.io.savemat(path, output)
 
 def DebugSaveSet(path,ROI,image,imageStats):
-#Saves an image with the retrieved statistics
-#Arguments:
-#   path: full file path
-#   ROI: ROI of the image
-#   image: image to be saved
-#   imageStatistics: statistics to be saved
+"""
+Saves an image with the retrieved statistics
+Arguments:
+  path: full file path
+  ROI: ROI of the image
+  image: image to be saved
+  imageStatistics: statistics to be saved
+"""
     output = {}
     output['imageset'] = {
         'ROI' : ROI,
@@ -622,12 +552,14 @@ def DebugSaveSet(path,ROI,image,imageStats):
         
         
 def SaveNoLasingData(path,averagedProfiles,runs,n):
-#Saves the non lasing references
-#Arguments:
-#   path: full file path
-#   averagedProfiles: groups of averaged profiles
-#   runs: list if the runs used
-#   n: total number of accumulated images
+"""
+Saves the non lasing references
+Arguments:
+  path: full file path
+  averagedProfiles: groups of averaged profiles
+  runs: list if the runs used
+  n: total number of accumulated images
+"""
     output = {}
     output['nolasing'] = {
         'averagedProfiles' : averagedProfiles,
@@ -638,14 +570,16 @@ def SaveNoLasingData(path,averagedProfiles,runs,n):
     scipy.io.savemat(path, output)
     
 def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
-#Obtain the x axis and y axis in physical units (time and energy)
-#Arguments:
-#   ROI: region of interes containing the x and y axis
-#   center: coordinates of the center of mass, array with two elements, the first one for the x coordinate and the second one for the y coordinate
-#   shottoShot: structure with the properties of the specific shot
-#   globalCalibration: structure with the global calibration for the xtcav
-#Output:
-#   outimage: 3d numpy array with the split image image where the first index is the bunch indesx, the second index correspond to y, and the third index corresponds to x
+"""
+Obtain the x axis and y axis in physical units (time and energy)
+Arguments:
+  ROI: region of interes containing the x and y axis
+  center: coordinates of the center of mass, array with two elements, the first one for the x coordinate and the second one for the y coordinate
+  shottoShot: structure with the properties of the specific shot
+  globalCalibration: structure with the global calibration for the xtcav
+Output:
+  outimage: 3d numpy array with the split image image where the first index is the bunch indesx, the second index correspond to y, and the third index corresponds to x
+"""
  
     umperpix=globalCalibration['umperpix']
     dumpe=globalCalibration['dumpe']
@@ -679,12 +613,14 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
     return physicalUnits
 
 def GetGlobalXTCAVCalibration(epicsStore):
-#Obtain the global XTCAV calibration form the epicsStore
-#Arguments:
-#   epicsStore
-#Output:
-#   globalCalibration: struct with the parameters
-#   ok: if all the data was retrieved correctly
+"""
+Obtain the global XTCAV calibration form the epicsStore
+Arguments:
+  epicsStore
+Output:
+  globalCalibration: struct with the parameters
+  ok: if all the data was retrieved correctly
+"""
 
     ok=1
 
@@ -728,12 +664,14 @@ def GetGlobalXTCAVCalibration(epicsStore):
           
     
 def GetXTCAVImageROI(epicsStore):
-#Obtain the ROI for the XTCAV image
-#Arguments:
-#   epicsStore
-#Output:
-#   ROI: struct with the ROI
-#   ok: if all the data was retrieved correctly
+"""
+Obtain the ROI for the XTCAV image
+Arguments:
+  epicsStore
+Output:
+  ROI: struct with the ROI
+  ok: if all the data was retrieved correctly
+"""
 
     ok=1
     
@@ -770,13 +708,15 @@ def GetXTCAVImageROI(epicsStore):
     return ROI,ok
     
 def ShotToShotParameters(ebeam,gasdetector):
-#Obtain shot to shot parameters
-#Arguments:
-#   ebeam: psana.Bld.BldDataEBeamV5
-#   gasdetector: psana.Bld.BldDataFEEGasDetEnergy
-#Output:
-#   ROI: struct with the ROI
-#   ok: if all the data was retrieved correctly
+"""
+Obtain shot to shot parameters
+Arguments:
+  ebeam: psana.Bld.BldDataEBeamV5
+  gasdetector: psana.Bld.BldDataFEEGasDetEnergy
+Output:
+  ROI: struct with the ROI
+  ok: if all the data was retrieved correctly
+"""
     ok=1
     echarge=1.60217657e-19;
 
@@ -814,13 +754,14 @@ def ShotToShotParameters(ebeam,gasdetector):
     return shotToShot,ok               
     
 def SplitImage(image, n):
-
-#Split an XTCAV image depending of different bunches, this function is still to be programmed properly
-#Arguments:
-#   image: 3d numpy array with the image where the first index always has one dimension (it will become the bunch index), the second index correspond to y, and the third index corresponds to x
-#   n: number of bunches expected to find
-#Output:
-#   outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
+Split an XTCAV image depending of different bunches, this function is still to be programmed properly
+Arguments:
+  image: 3d numpy array with the image where the first index always has one dimension (it will become the bunch index), the second index correspond to y, and the third index corresponds to x
+  n: number of bunches expected to find
+Output:
+  outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
     
     
     if n==1:    #For one bunch, just the same image
@@ -840,11 +781,13 @@ def SplitImage(image, n):
     
     
 def HorizontalLineSplitting(image):
-#Divides the image with a horizontal line at the center of mass
-#Arguments:
-#   image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
-#Output:
-#   outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
+Divides the image with a horizontal line at the center of mass
+Arguments:
+  image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
+Output:
+  outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
     
     outimage=np.zeros((2,image.shape[0],image.shape[1]))
     x=range(image.shape[1])
@@ -856,11 +799,13 @@ def HorizontalLineSplitting(image):
     return outimage
     
 def RotatingLineSplitting(image):
-#Divides the image with a straight line crossing the center of mass at the optimal angle
-#Arguments:
-#   image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
-#Output:
-#   outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
+Divides the image with a straight line crossing the center of mass at the optimal angle
+Arguments:
+  image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
+Output:
+  outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
     
     outimage=np.zeros((2,image.shape[0],image.shape[1]))
     x=range(image.shape[1])
@@ -909,11 +854,13 @@ def RotatingLineSplitting(image):
     
     
 def OptimalSplittingLine(image):
-#Find the optimal line to separate the two bunches and separates the image in two. Assuming they have different energy for each x value obtains the optimal y value between two peaks.
-#Arguments:
-#   image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
-#Output:
-#   outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
+Find the optimal line to separate the two bunches and separates the image in two. Assuming they have different energy for each x value obtains the optimal y value between two peaks.
+Arguments:
+  image: 2d numpy array with the image where the first index correspond to y, and the second index corresponds to x
+Output:
+  outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
     #Use the center of mass as a starting point
     Nx=image.shape[1]
     Ny=image.shape[0]
@@ -963,12 +910,14 @@ def OptimalSplittingLine(image):
 
     
 def IslandSplitting(image,N):
-#Find islands in the picture and order them by area, returning the image in N images, ordered by area. Teh total area is one.
-#Arguments:
-#   image: 2d numpy array with the image where the first index correspond to y, and thesecond index corresponds to x
-#   N: number of islands to return
-#Output:
-#   outimages: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
+Find islands in the picture and order them by area, returning the image in N images, ordered by area. Teh total area is one.
+Arguments:
+  image: 2d numpy array with the image where the first index correspond to y, and thesecond index corresponds to x
+  N: number of islands to return
+Output:
+  outimages: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+"""
     
     #Use the center of mass as a starting point
     Nx=image.shape[1]
