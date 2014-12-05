@@ -558,7 +558,7 @@ class ShotToShotCharacterization(object):
         self._roiwaistthres = roiwaistthres
     @property
     def roiexpand(self):
-        return self._groupsize
+        return self._roiexpand
     @roiexpand.setter
     def roiexpand(self, roiexpand):
         self._roiexpand = roiexpand
