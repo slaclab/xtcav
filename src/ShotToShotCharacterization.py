@@ -21,6 +21,16 @@ from CalibrationPaths import *
 
 class ShotToShotCharacterization(object):
 
+    """
+    Class that can be used to reconstruct the full X-Ray power time profile for single or multiple bunches, relying on the presence of a dark background reference, and a lasing off reference. (See GenerateDarkBackground and Generate LasingOffReference for more information)
+    Attributes:
+        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
+        medianfilter (int): Number of neighbours for median filter (If not set, the value that was used for the lasing off reference will be used).
+        snrfilter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
+        roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
+        roiexpand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
+    """
+
     def __init__(self):
         
         #Handle warnings
@@ -70,6 +80,11 @@ class ShotToShotCharacterization(object):
         self._gasdetector=[]
         
     def LoadDarkReference(self):
+        """
+        Method that loads the dark reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
+        
+        Returns: True if successful, False otherwise        
+        """
         if not self._darkreferencepath:
             cp=CalibrationPaths(self._datasource,self._calpath)       
             self._darkreferencepath=cp.findCalFileName('pedestals',self._currentevent.run())
@@ -86,6 +101,11 @@ class ShotToShotCharacterization(object):
         return True
         
     def LoadLasingOffReference(self):
+        """
+        Method that loads the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
+        
+        Returns: True if successful, False otherwise        
+        """
         if not self._lasingoffreferencepath:
             cp=CalibrationPaths(self._datasource,self._calpath)     
             self._lasingoffreferencepath=cp.findCalFileName('lasingoffreference',self._currentevent.run())
@@ -115,6 +135,9 @@ class ShotToShotCharacterization(object):
         return True
             
     def LoadDefaultProcessingParameters(self):
+        """
+        Method that sets some standard processing parameters in case they have not been explicitly set by the user and could not been retrieved from the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.             
+        """
         if math.isnan(self._nb):
             self._nb=1
         if math.isnan(self._medianfilter):
@@ -127,6 +150,16 @@ class ShotToShotCharacterization(object):
             self._roiexpand=2.5    
                            
     def SetCurrentEvent(self,evt):
+        """
+        Method that sets a psana event to be the current event. Only after setting an event it is possible to query for results such as X-Ray power, or pulse delay. On the other hand, the calculations to get the reconstruction will not be done until the information itself is requested, so the call to this method should be quite fast.
+
+        Args:
+            evt (psana event): relevant event to retrieve information form
+            
+        Returns:
+            True: All the input form detectors necessary for a good reconstruction are present in the event. 
+            False: The information from some detectors is missing for that event. It may still be possible to get information.
+        """
         ebeam = evt.get(psana.Bld.BldDataEBeamV6,self.ebeam_data)   
         if not ebeam:
             ebeam = evt.get(psana.Bld.BldDataEBeamV5,self.ebeam_data)  
@@ -158,18 +191,22 @@ class ShotToShotCharacterization(object):
             return False
         
     def SetDataSource(self,datasource):
-        self._datasource=datasource
-        self._datasourceinfo=False  
+        """
+        After creating an instance of the ShotToShotCharacterization class, it is necessary to pass the dataSource object for that data that is being analysed.
 
-    def GetFullResults(self):
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return [],False
+        Args:
+            datasource (Datasource object): DataSource object that is going to be used for the analysis.
             
-        return self._eventresultsstep3 ,True  
+        """
+        self._datasource=datasource
+        self._datasourceinfo=False    
         
     def ProcessShotStep1(self):
-        
+        """
+        Method that runs the first step of the reconstruction, which consists of getting statistics from the XTCAV trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
+
+        Returns: True if it was successful, False otherwise
+        """
         if not self._currenteventavailable:
             return False
            
@@ -221,6 +258,11 @@ class ShotToShotCharacterization(object):
         return True
         
     def ProcessShotStep2(self):
+        """
+        Method that runs the second step of the reconstruction, which consists of converting from pixel units into time and energy units for the trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
+
+        Returns: True if it was successful, False otherwise
+        """
         if not self._currenteventprocessedstep1:
             if not self.ProcessShotStep1():
                 return False
@@ -254,6 +296,11 @@ class ShotToShotCharacterization(object):
         return True       
     
     def ProcessShotStep3(self):
+        """
+        Method that runs the third step of the reconstruction, which consists of comparing the profiles to the reference profiles to obtain the X-Ray power. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
+
+        Returns: True if it was successful, False otherwise
+        """
         if not self._currenteventprocessedstep2:
             if not self.ProcessShotStep2():
                 return False
@@ -265,9 +312,48 @@ class ShotToShotCharacterization(object):
         #Using all the available data, perform the retrieval for that given shot        
         self._eventresultsstep3=xtu.ProcessLasingSingleShot(self._eventresultsstep2['PU'],self._eventresultsstep2['imageStats'],self._eventresultsstep2['shotToShot'],self._lasingoffreference.averagedProfiles) 
         self._currenteventprocessedstep3=True  
-        return True                    
+        return True            
+
+    def GetFullResults(self):
+        """
+        Method which returns a dictionary based list with the full results of the characterization
+
+        Returns: 
+            out1: List with the results
+                 't':                           Master time vector in fs
+                'powerECOM':                    Retrieved power in GW based on ECOM
+                'powerERMS':                    Retrieved power in GW based on ERMS
+                'powerAgreement':               Agreement between the two intensities
+                'bunchdelay':                   Delay from each bunch with respect to the first one in fs
+                'bunchdelaychange':             Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
+                'xrayenergy':                   Total x-ray energy from the gas detector in J
+                'lasingenergyperbunchECOM':     Energy of the XRays generated from each bunch for the center of mass approach in J
+                'lasingenergyperbunchERMS':     Energy of the XRays generated from each bunch for the dispersion approach in J
+                'bunchenergydiff':              Distance in energy for each bunch with respect to the first one in MeV
+                'bunchenergydiffchange':        Comparison of that distance with respect to the no lasing
+                'lasingECurrent':               Electron current for the lasing trace (In #electrons/s)
+                'nolasingECurrent':             Electron current for the no lasing trace (In #electrons/s)
+                'lasingECOM':                   Lasing energy center of masses for each time in MeV
+                'nolasingECOM':                 No lasing energy center of masses for each time in MeV
+                'lasingERMS':                   Lasing energy dispersion for each time in MeV
+                'nolasingERMS':                 No lasing energy dispersion for each time in MeV
+                'NB':                           Number of bunches
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return [],False
             
-    def InterBunchPulseDelayBasedOnCurrent(self):                               
+        return self._eventresultsstep3 ,True        
+            
+    def InterBunchPulseDelayBasedOnCurrent(self):    
+        """
+        Method which returns the time delay between the x-rays generated from different bunches with respect to the first one based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval.
+
+        Returns: 
+            out1: List of the delays. Since it is referenced to the first bunch, the first value is always 0.
+            out2: True if the retrieval was successful, False otherwise. 
+        """
         if not self._currenteventprocessedstep2:
             if not self.ProcessShotStep2():
                 return [],False
@@ -288,6 +374,14 @@ class ShotToShotCharacterization(object):
         return peakpos,True
         
     def XRayPower(self):       
+        """
+        Method which returns the power profile for the X-Rays generated by each electron bunch. This is the averaged result from the RMS method and the COM method.
+
+        Returns: 
+            out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
+            out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
+            out3: True if the retrieval was successful, False otherwise. 
+        """
         
         t=[]
         power=[]
@@ -305,7 +399,14 @@ class ShotToShotCharacterization(object):
         return t,(self._eventresultsstep3['powerERMS']+self._eventresultsstep3['powerECOM'])/2,True         
         
     def XRayPowerRMSBased(self):   
-        
+        """
+        Method which returns the power profile for the X-Rays generated by each electron bunch using the RMS method.
+
+        Returns: 
+            out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
+            out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
+            out3: True if the retrieval was successful, False otherwise. 
+        """
         t=[]
         power=[]
             
@@ -323,7 +424,14 @@ class ShotToShotCharacterization(object):
         
 
     def XRayPowerCOMBased(self):   
-        
+        """
+        Method which returns the power profile for the X-Rays generated by each electron bunch using the COM method.
+
+        Returns: 
+            out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
+            out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
+            out3: True if the retrieval was successful, False otherwise.
+        """
         t=[]
         power=[]
             
@@ -340,7 +448,13 @@ class ShotToShotCharacterization(object):
         return t,self._eventresultsstep3['powerECOM'],True  
         
     def XRayEnergyPerBunch(self):   
-        
+        """
+        Method which returns the total X-Ray energy generated per bunch. This is the averaged result from the RMS method and the COM method.
+
+        Returns: 
+            out1: List with the values of the energy for each bunch in J
+            out2: True if the retrieval was successful, False otherwise.
+        """
         energies=[]
             
         if not self._currenteventprocessedstep3:
@@ -350,7 +464,13 @@ class ShotToShotCharacterization(object):
         return (self._eventresultsstep3['lasingenergyperbunchECOM']+self._eventresultsstep3['lasingenergyperbunchERMS'])/2,True  
         
     def XRayEnergyPerBunchCOMBased(self):   
-        
+        """
+        Method which returns the total X-Ray energy generated per bunch based on the COM method.
+
+        Returns: 
+            out1: List with the values of the energy for each bunch in J
+            out2: True if the retrieval was successful, False otherwise.
+        """
         energies=[]
             
         if not self._currenteventprocessedstep3:
@@ -360,7 +480,13 @@ class ShotToShotCharacterization(object):
         return self._eventresultsstep3['lasingenergyperbunchECOM'],True  
     
     def XRayEnergyPerBunchRMSBased(self):   
-        
+        """
+        Method which returns the total X-Ray energy generated per bunch based on the RMS method.
+
+        Returns: 
+            out1: List with the values of the energy for each bunch in J
+            out2: True if the retrieval was successful, False otherwise.
+        """
         energies=[]
             
         if not self._currenteventprocessedstep3:
@@ -371,13 +497,27 @@ class ShotToShotCharacterization(object):
         
         
         
-    def RawXTCAVImage(self):                  
+    def RawXTCAVImage(self):     
+        """
+        Method which returns the raw XTCAV image. This does not require of references at all.
+
+        Returns: 
+            out1: 2D array with the image
+            out2: True if the retrieval was successful, False otherwise.
+        """    
         if not self._currenteventavailable:
             return [],False
             
         return self._rawimage,True
         
-    def ProcessedXTCAVImage(self):                  
+    def ProcessedXTCAVImage(self):    
+        """
+        Method which returns the processed XTCAV image after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
+
+        Returns: 
+            out1: 3D array where the first index is bunch number, and the other two are the image.
+            out2: True if the retrieval was successful, False otherwise.
+        """     
         if not self._currenteventprocessedstep1:
             if not self.ProcessShotStep1():
                 return [],False
@@ -385,7 +525,13 @@ class ShotToShotCharacterization(object):
         return self._eventresultsstep1['processedImage'],True
         
     def ReconstructionAgreement(self): 
-    
+        """
+        Value for the agreement of the reconstruction using the RMS method and using the COM method. It consists of a value ranging from -1 to 1.
+
+        Returns: 
+            out1: value for the agreement.
+            out2: True if the retrieval was successful, False otherwise.
+        """
         if not self._currenteventprocessedstep3:
             if not self.ProcessShotStep3():
                 return float('nan'),False

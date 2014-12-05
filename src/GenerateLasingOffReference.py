@@ -1,7 +1,5 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 
-#Script for the generation of the non lasing reference
-
 import os
 import time
 import psana
@@ -19,7 +17,7 @@ from CalibrationPaths import *
 
 class GenerateLasingOffReference(object):
     """
-    Class that generates a lasing off references for XTCAV reconstruction purposes
+    Class that generates a set of lasing off references for XTCAV reconstruction purposes
     Attributes:
         experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
         runs (str): String with a run number, or a run interval. E.g. '123'  '134-156' 145,136'
