@@ -32,7 +32,7 @@ class ShotToShotCharacterization(object):
     """
 
     def __init__(self):
-        
+            
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
@@ -172,7 +172,6 @@ class ShotToShotCharacterization(object):
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
         self._eventresultsstep3=[]
-        
         
         # If there is not frame, there is nothing we can do
         if (not frame):

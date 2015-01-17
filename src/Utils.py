@@ -119,7 +119,7 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
       image: image after subtracting the background
       ROI: region of interest of the ouput image
     """
-    
+
     #This only contemplates the case when the ROI of the darkbackground is larger than the ROI of the image. Other cases should be contemplated in the future
     minX=ROI['x0']-ROI_db['x0'];
     maxX=(ROI['x0']+ROI['xN']-1)-ROI_db['x0'];
@@ -142,7 +142,6 @@ def DenoiseImage(image,medianfilter,snrfilter):
       image: filtered image
       ok: true if there is something in the image
     """
-
     SNR_border=100
 
     ok=1
@@ -159,7 +158,7 @@ def DenoiseImage(image,medianfilter,snrfilter):
     #Setting a threshold equal to 10 times the standard deviation
     thres=snrfilter*std;    
     image[image < thres ] = 0 
-    
+       
     #We also normalize the image to have a total area of one
     if(np.sum(image)>0):
         image=image/np.sum(image)
@@ -190,7 +189,7 @@ def FindROI(image,ROI,threshold,expandfactor):
     thres=profileX[maxpos]*threshold;                       #Threshold value
     overthreshold=np.nonzero(profileX>=thres)[0];           #Indices that correspond to values higher than the threshold
     center=(overthreshold[0]+overthreshold[-1])/2;          #Middle position between the first value and the last value higher than th threshold
-    width=(overthreshold[-1]-overthreshold[0])*expandfactor;  #Total width after applying the expand factor
+    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor;  #Total width after applying the expand factor
     ind1X=np.round(center-width/2);                         #Index on the left side form the center
     ind2X=np.round(center+width/2);                         #Index on the right side form the center
     ind1X=np.amax([0,ind1X])                                #Check that the index is not too negative
@@ -201,12 +200,12 @@ def FindROI(image,ROI,threshold,expandfactor):
     thres=profileY[maxpos]*threshold;
     overthreshold=np.nonzero(profileY>=thres)[0];
     center=(overthreshold[0]+overthreshold[-1])/2;
-    width=(overthreshold[-1]-overthreshold[0])*expandfactor;
+    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor;
     ind1Y=np.round(center-width/2);
     ind2Y=np.round(center+width/2);
     ind1Y=np.amax([0,ind1Y])
     ind2Y=np.amin([profileY.size,ind2Y])
-        
+   
     #Cropping the image using the calculated indices
     cropped=np.zeros((ind2Y-ind1Y,ind2X-ind1X))
     cropped[:,:]=image[ind1Y:ind2Y,ind1X:ind2X]
@@ -763,7 +762,6 @@ def SplitImage(image, n):
       outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
     """
     
-    
     if n==1:    #For one bunch, just the same image
         outimage=np.zeros((n,image.shape[0],image.shape[1]))
         outimage[0,:,:]=image    
@@ -918,7 +916,6 @@ def IslandSplitting(image,N):
     Output:
       outimages: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
     """
-    
     #Use the center of mass as a starting point
     Nx=image.shape[1]
     Ny=image.shape[0]
@@ -960,6 +957,7 @@ def IslandSplitting(image,N):
     #And we order the output based on angular distribution
     
     #If the distance of one of the islands to -180/180 angle is smaller than a certain fraction, we add an angle to make sure that nothing is close to the zero angle
+
     dist=180-abs(angles)
     if np.amin(dist)<30.0/n_valid:
         angles=angles+180.0/n_valid
