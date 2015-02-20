@@ -164,6 +164,8 @@ class ShotToShotCharacterization(object):
         if not ebeam:
             ebeam = evt.get(psana.Bld.BldDataEBeamV5,self.ebeam_data)  
         gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,self.gasdetector_data) 
+        if not gasdetector:
+            gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergyV1,self.gasdetector_data) 
         frame = evt.get(self.xtcav_type, self.xtcav_camera) 
         
         self._currenteventprocessedstep1=False
@@ -172,7 +174,8 @@ class ShotToShotCharacterization(object):
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
         self._eventresultsstep3=[]
-        
+
+
         # If there is not frame, there is nothing we can do
         if (not frame):
             self._currenteventavailable=False     
@@ -206,9 +209,10 @@ class ShotToShotCharacterization(object):
 
         Returns: True if it was successful, False otherwise
         """
+
         if not self._currenteventavailable:
             return False
-           
+  
         #It is important that this is open first so the experiment name is set properly (important for loading references)   
         if not self._datasourceinfo:
             self._experiment=self._datasource.env().experiment()
@@ -219,6 +223,7 @@ class ShotToShotCharacterization(object):
                 self._datasourceinfo=True
             else:
                 return False
+
         #It is important that the lasing off reference is open first, because it may reset the lasing off reference that needs to be loaded        
         if not self._loadedlasingoffreference:
             self.LoadLasingOffReference()
@@ -240,6 +245,7 @@ class ShotToShotCharacterization(object):
         img,ok=xtu.DenoiseImage(img,self._medianfilter,self._snrfilter)                    #Remove noise from the image and normalize it
         if not ok:                                        #If there is nothing in the image we skip the event  
             return False
+
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
         img=xtu.SplitImage(img,self._nb)
         imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
@@ -248,6 +254,7 @@ class ShotToShotCharacterization(object):
         
         self._eventresultsstep1={
             'processedImage':img,
+            'NB':img.shape[0],
             'ROI':ROI,
             'imageStats':imageStats,
             }
@@ -262,23 +269,24 @@ class ShotToShotCharacterization(object):
 
         Returns: True if it was successful, False otherwise
         """
+
         if not self._currenteventprocessedstep1:
             if not self.ProcessShotStep1():
                 return False
-        
+
         shotToShot,ok = xtu.ShotToShotParameters(self._ebeam,self._gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         if not ok: #If the information is not good, we skip the event
             return False
-                           
+                   
         imageStats=self._eventresultsstep1['imageStats'];
         ROI=self._eventresultsstep1['ROI']
-                           
+                  
         PU=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,self._globalCalibration) #Obtain the physical units for the axis x and y, in fs and MeV
         
         #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles     
         if PU['xfsPerPix']<0:
             PU['xfs']=PU['xfs'][::-1]
-            for j in range(self._nb):
+            for j in range(self._eventresultsstep1['NB']):
                 imageStats[j]['xProfile']=imageStats[j]['xProfile'][::-1]
                 imageStats[j]['yCOMslice']=imageStats[j]['yCOMslice'][::-1]
                 imageStats[j]['yRMSslice']=imageStats[j]['yRMSslice'][::-1]
@@ -306,6 +314,10 @@ class ShotToShotCharacterization(object):
         
         #There is no possible step 3 if there is not lasing off reference
         if not self._loadedlasingoffreference:
+            return False
+
+        #If the nubmer of bunches in the reference is not equal to the number of found bunches, we cannot reconstruct
+        if self._eventresultsstep1['NB']!=self._nb:
             return False
         
         #Using all the available data, perform the retrieval for that given shot        
@@ -347,30 +359,126 @@ class ShotToShotCharacterization(object):
             
     def InterBunchPulseDelayBasedOnCurrent(self):    
         """
-        Method which returns the time delay between the x-rays generated from different bunches with respect to the first one based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval.
+        Method which returns the time delay between the x-rays generated from different bunches based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval They are referred to the center of masses of the total current. The order of the delays goes from higher to lower energy electron bunches.
 
         Returns: 
-            out1: List of the delays. Since it is referenced to the first bunch, the first value is always 0.
+            out1: List of the delays for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
         if not self._currenteventprocessedstep2:
             if not self.ProcessShotStep2():
                 return [],False
             
-        if (self._nb<2):
-            return [0],True
+        if (self._eventresultsstep1['NB']<1):
+            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
         
         t=self._eventresultsstep2['PU']['xfs']   
           
-        peakpos=np.zeros((self._nb), dtype=np.float64);
-        for j in range(0,self._nb):
+        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
+        for j in range(0,self._eventresultsstep1['NB']):
+            #highest value method
+            peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
+            
+            #five highest values method
             ind=np.mean(np.argpartition(-self._eventresultsstep2['imageStats'][j]['xProfile'],5)[0:5]) #Find the position of the 5 highest values
             peakpos[j]=t[ind]
-            #peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
-                
-        peakpos=peakpos-peakpos[0]
-                    
+            
+            #quadratic fit around 5 pixels method
+            central=np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])
+            try:
+                fit=np.polyfit(t[central-2:central+3],self._eventresultsstep1['imageStats'][j]['xProfile'][central-2:central+3],2)
+                peakpos[j]=-fit[1]/(2*fit[0])
+            except:
+                return [],False  
+            
         return peakpos,True
+        
+    def InterBunchPulseDelayBasedOnCurrentFourierFiltered(self,targetwidthfs=20,thresholdfactor=0):    
+        """
+        Method which returns the time delay between the x-rays generated from different bunches based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval They are referred to the center of masses of the total current. The order of the delays goes from higher to lower energy electron bunches. This method includes a Fourier filter that applies a low pass filter to amplify the feature identified as the lasing part of the bunch, and ignore other peaks that may be higher in amplitude but also higher in width. It is possible to threshold the signal before calculating the Fourier transform to automatically discard peaks that may be sharp, but too low in amplitude to be the right peaks.
+        Args:
+            targetwidthfs (float): Witdh of the peak to be used for calculating delay
+            thresholdfactor (float): Value between 0 and 1 that indicates which threshold factor to apply to filter the signal before calculating the fourier transform
+        Returns: 
+            out1: List of the delays for each bunch.
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+        if not self._currenteventprocessedstep2:
+            if not self.ProcessShotStep2():
+                return [],False
+            
+        if (self._eventresultsstep1['NB']<1):
+            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        
+        t=self._eventresultsstep2['PU']['xfs']   
+        
+        #Preparing the low pass filter
+        N=len(t)
+        dt=abs(self._eventresultsstep2['PU']['xfsPerPix'])
+        df=1/(dt*N)
+        
+        if(N%2==0):
+            f=np.array(range(0,N/2)+range(-N/2,0))*df
+        else:
+            f=np.array(range(0,N/2+1)+range(-N/2,0))*df
+                           
+        ffilter=(1-np.exp(-(f*targetwidthfs)**6))
+          
+        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
+        for j in range(0,self._eventresultsstep1['NB']):
+            #Getting the profile and the filtered version
+            profile=self._eventresultsstep1['imageStats'][j]['xProfile']
+            profilef=profile-np.max(profile)*thresholdfactor
+            profilef[profilef<0]=0
+            profilef=np.fft.ifft(np.fft.fft(profilef)*ffilter)
+        
+            #highest value method
+            peakpos[j]=t[np.argmax(profilef)]
+            
+            #five highest values method
+            ind=np.mean(np.argpartition(-profilef,5)[0:5]) #Find the position of the 5 highest values
+            peakpos[j]=t[ind]
+            
+            #quadratic fit around 5 pixels method and then fit to the original signal
+            central=np.argmax(profilef)
+            try:
+                fit=np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
+                peakpos[j]=-fit[1]/(2*fit[0])
+            except:
+                return [],False  
+            
+        return peakpos,True
+
+    def QuadRefine(self,p):
+        x1,x2,x3 = p + np.array([-1,0,1])
+        y1,y2,y3 = self.wf[(p-self.rangelim[0]-1):(p-self.rangelim[0]+2)]
+        d = (x1-x2)*(x1-x3)*(x2-x3)
+        A = ( x3 * (y2-y1) + x2 * (y1-y3) + x1 * (y3-y2) ) / d
+        B = ( x3**2.0 * (y1-y2) + x2**2.0 * (y3-y1) + x1**2.0 * (y2-y3) ) / d
+        return -1*B / (2*A)
+
+    def ElectronCurrentPerBunch(self):    
+        """
+        Method which returns the electron current per bunch. A lasing off reference is not necessary for this retrieval.
+
+        Returns: 
+            out1: time vectors in fs
+            out2: electron currents in arbitrary units
+            out3: True if the retrieval was successful, False otherwise
+        """
+        if not self._currenteventprocessedstep2:
+            if not self.ProcessShotStep2():
+                return [],[],False
+        
+        t=self._eventresultsstep2['PU']['xfs']   
+
+        tout=np.zeros((self._eventresultsstep1['NB'],len(t)), dtype=np.float64);
+        currents=np.zeros((self._eventresultsstep1['NB'],len(t)), dtype=np.float64);
+        for j in range(0,self._eventresultsstep1['NB']):
+            tout[j,:]=t
+            currents[j,:]=self._eventresultsstep1['imageStats'][j]['xProfile']
+                    
+        return tout,currents,True
         
     def XRayPower(self):       
         """

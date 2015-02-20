@@ -620,15 +620,24 @@ def GetGlobalXTCAVCalibration(epicsStore):
       globalCalibration: struct with the parameters
       ok: if all the data was retrieved correctly
     """
-
+    
     ok=1
 
-    umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
-    strstrength=epicsStore.value('Streak_Strength')
-    rfampcalib=epicsStore.value('XTCAV_Cal_Amp')
-    rfphasecalib=epicsStore.value('XTCAV_Cal_Phase')
-    dumpe=epicsStore.value('Dump_Energy')
-    dumpdisp=epicsStore.value('Dump_Disp')
+    umperpix=epicsStore.value('XTCAV_calib_umPerPx')
+    strstrength=epicsStore.value('XTCAV_strength_par_S')
+    rfampcalib=epicsStore.value('XTCAV_Amp_Des_calib_MV')
+    rfphasecalib=epicsStore.value('XTCAV_Phas_Des_calib_deg')
+    dumpe=epicsStore.value('XTCAV_Beam_energy_dump_GeV')
+    dumpdisp=epicsStore.value('XTCAV_calib_disp_posToEnergy')
+
+
+    if strstrength==None:                #Try old values          
+        umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
+        strstrength=epicsStore.value('Streak_Strength')
+        rfampcalib=epicsStore.value('XTCAV_Cal_Amp')
+        rfphasecalib=epicsStore.value('XTCAV_Cal_Phase')
+        dumpe=epicsStore.value('Dump_Energy')
+        dumpdisp=epicsStore.value('Dump_Disp')
         
     #Try old values     
     if strstrength==None:                #Try old values    
@@ -639,15 +648,15 @@ def GetGlobalXTCAVCalibration(epicsStore):
         dumpe=epicsStore.value('REFS:DMP1:400:EDES')
         dumpdisp=epicsStore.value('SIOC:SYS0:ML01:AO216')
     
-        if strstrength==None:                #Some hardcoded values
-            warnings.warn_explicit('No XTCAV Calibration',UserWarning,'XTCAV',0)
-            ok=0
-            umperpix=35.47
-            strstrength=48.2406251901
-            rfampcalib=20
-            rfphasecalib=180
-            dumpdisp=0.56376747213
-            dumpe=3.442
+    if strstrength==None:                #Some hardcoded values
+        warnings.warn_explicit('No XTCAV Calibration',UserWarning,'XTCAV',0)
+        ok=0
+        umperpix=0#35.09
+        strstrength=0#75.7755218282
+        rfampcalib=0#30.0
+        rfphasecalib=0#91.5137179027
+        dumpe=0#3.351
+        dumpdisp=0#0.562354882477
              
     globalCalibration={
         'umperpix':umperpix, #Pixel size of the XTCAV camera
@@ -673,11 +682,17 @@ def GetXTCAVImageROI(epicsStore):
     """
 
     ok=1
-    
-    roiXN=epicsStore.value('ROI_X_Length')
-    roiX=epicsStore.value('ROI_X_Offset')
-    roiYN=epicsStore.value('ROI_Y_Length')
-    roiY=epicsStore.value('ROI_Y_Offset')
+
+    roiXN=epicsStore.value('XTCAV_ROI_sizeX')
+    roiX=epicsStore.value('XTCAV_ROI_startX')
+    roiYN=epicsStore.value('XTCAV_ROI_sizeY')
+    roiY=epicsStore.value('XTCAV_ROI_startY')
+
+    if roiX==None:           #Try old values   
+        roiXN=epicsStore.value('ROI_X_Length')
+        roiX=epicsStore.value('ROI_X_Offset')
+        roiYN=epicsStore.value('ROI_Y_Length')
+        roiY=epicsStore.value('ROI_Y_Offset')
             
     if roiX==None:           #Try old values      
         roiX=epicsStore.value('OTRS:DMP1:695:MinX')
@@ -685,13 +700,13 @@ def GetXTCAVImageROI(epicsStore):
         roiXN=epicsStore.value('OTRS:DMP1:695:SizeX')
         roiYN=epicsStore.value('OTRS:DMP1:695:SizeY')
                        
-        if roiX==None: #Some hardcoded values        
-            warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
-            ok=0
-            roiX=0                                  
-            roiY=0
-            roiXN=1024
-            roiYN=1024
+    if roiX==None: #Some hardcoded values        
+        warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
+        ok=0
+        roiXN=0#1024                                 
+        roiX=0
+        roiYN=1024
+        roiY=0
 
     x=roiX+np.arange(0, roiXN)
     y=roiY+np.arange(0, roiYN)
@@ -922,9 +937,6 @@ def IslandSplitting(image,N):
     x=range(Nx)
     y=range(Ny)
     
-    #Structure for the output
-    outimages=np.zeros((N,Ny,Nx))
-    
     #Get a bool image with just zeros and ones
     imgbool=image>0
     
@@ -943,28 +955,44 @@ def IslandSplitting(image,N):
     #Get the indices in descending area order
     orderareaind=np.argsort(areas)  
     orderareaind=np.flipud(orderareaind)
-    
+
+    #Check that the area of the second bunch is not smaller than a fraction of the first bunch (otherwise the split probably did not succeed)
+    n_area_valid=1
+    for i in range(1,n_groups): 
+        if areas[orderareaind[i]]<1.0/20*areas[orderareaind[0]]:
+            break
+        else:
+            n_area_valid+=1
+
     #Number of valid images for the output
-    n_valid=np.amin([N,n_groups])    
+    n_valid=np.amin([N,n_groups,n_area_valid])    
     
     #Calculate the angle of each large area island with respect to the center of mass
     x0,y0=GetCenterOfMass(image,x,y)        
     angles=np.zeros(n_valid,dtype=np.float64)
+    xi=np.zeros(n_valid,dtype=np.float64)
+    yi=np.zeros(n_valid,dtype=np.float64)
     for i in range(n_valid):
-        xi,yi=GetCenterOfMass(images[orderareaind[i]],x,y)
-        angles[i]=math.degrees(np.arctan2(yi-y0,xi-x0))
+        xi[i],yi[i]=GetCenterOfMass(images[orderareaind[i]],x,y)
+        angles[i]=math.degrees(np.arctan2(yi[i]-y0,xi[i]-x0))
                 
     #And we order the output based on angular distribution
     
     #If the distance of one of the islands to -180/180 angle is smaller than a certain fraction, we add an angle to make sure that nothing is close to the zero angle
 
-    dist=180-abs(angles)
-    if np.amin(dist)<30.0/n_valid:
-        angles=angles+180.0/n_valid
-            
-    #Ordering
-    orderangleind=np.argsort(angles)  
-        
+    
+    #Ordering in angles (counterclockwise from 3 oclock)
+    #dist=180-abs(angles)
+    #if np.amin(dist)<30.0/n_valid:
+    #    angles=angles+180.0/n_valid
+    #orderangleind=np.argsort(angles)  
+
+    #Ordering in height (higher energy first)
+    orderangleind=np.argsort(-yi)  
+
+    #Structure for the output
+    outimages=np.zeros((n_valid,Ny,Nx))        
+
     #Assign the proper images to the output
     for i in range(n_valid):
         outimages[i,:,:]=images[orderareaind[orderangleind[i]]]

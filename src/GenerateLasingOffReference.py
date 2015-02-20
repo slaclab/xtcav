@@ -66,7 +66,7 @@ class GenerateLasingOffReference(object):
         print '\t Dark reference run: %s' % self._darkreferencepath
 
         #Loading the data, this way of working should be compatible with both xtc and hdf5 files
-        dataSource=psana.DataSource("exp=%s:run=%s" % (self._experiment,self._runs))
+        dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self._experiment,self._runs))
 
         #Camera and type for the xtcav images
         xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
@@ -91,27 +91,36 @@ class GenerateLasingOffReference(object):
         runs=numpy.array([],dtype=int) #Array that contains the run processed run numbers
         #for r,run in enumerate(dataSource.runs()):
         for r in [0]: 
+            
             run=dataSource.runs().next(); #This line and the previous line are a temporal hack to go only through the first run, that avoids an unexpected block when calling next at the iterator, when there are not remaining runs.
             runs = numpy.append(runs,run.run());
             n_r=0 #Counter for the total number of xtcav images processed within the run        
-            for e, evt in enumerate(run.events()):
+            #for e, evt in enumerate(run.events()):
+            times = run.times()
+            for t in range(len(times)-1,-1,-1): #Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
+                evt=run.event(times[t])
+
                 ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)        
                 if not ebeam:
                     ebeam = evt.get(psana.Bld.BldDataEBeamV5,ebeam_data)
-                
+
                 gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,gasdetector_data) 
-                
+                if not gasdetector:
+                    gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergyV1,gasdetector_data) 
+
                 #After the first event the epics store should contain the ROI of the xtcav images and the calibration of the XTCAV
                 if not 'ROI_XTCAV' in locals(): 
                     ROI_XTCAV,ok=xtu.GetXTCAVImageROI(epicsStore) 
                     if not ok: #If the information is not good, we try next event
                         del ROI_XTCAV
                         continue
+
                 if not 'globalCalibration' in locals():
                     globalCalibration,ok=xtu.GetGlobalXTCAVCalibration(epicsStore)
                     if not ok: #If the information is not good, we try next event
                         del globalCalibration
                         continue
+
                 #If we have not loaded the dark background information yet, we do
                 if not 'db' in locals():
                     if not self._darkreferencepath:
@@ -124,22 +133,24 @@ class GenerateLasingOffReference(object):
                         db=False
                     else:
                         db=DarkBackground.Load(self._darkreferencepath)
-        
+
                     
                 
                               
                 frame = evt.get(xtcav_type, xtcav_camera) 
+
+
                 if frame: #For each shot that contains an xtcav frame we retrieve it        
                     img=frame.data16().astype(np.float64)
-                    
+
                     if np.max(img)>=16383 : #Detection if the image is saturated, we skip if it is
                         print 'Saturated Image'
                         continue
-                        
+   
                     shotToShot,ok = xtu.ShotToShotParameters(ebeam,gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
                     if not ok: #If the information is not good, we skip the event
                         continue
-                    
+
                     #Subtract the dark background, taking into account properly possible different ROIs, if it is available
                     if db:        
                         img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) 
@@ -150,7 +161,11 @@ class GenerateLasingOffReference(object):
                         continue
                     img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
                     img=xtu.SplitImage(img,self._nb)
-                    imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace                                                                                                                  
+                    if self._nb!=img.shape[0]:
+                        continue
+                    imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
+
+                                                                                                                       
                                                                      
                     listImageStats.append(imageStats)
                     listShotToShot.append(shotToShot)
