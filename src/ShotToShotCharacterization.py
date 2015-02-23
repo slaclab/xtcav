@@ -377,11 +377,11 @@ class ShotToShotCharacterization(object):
         peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
         for j in range(0,self._eventresultsstep1['NB']):
             #highest value method
-            peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
+            #peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
             
             #five highest values method
-            ind=np.mean(np.argpartition(-self._eventresultsstep2['imageStats'][j]['xProfile'],5)[0:5]) #Find the position of the 5 highest values
-            peakpos[j]=t[ind]
+            #ind=np.mean(np.argpartition(-self._eventresultsstep2['imageStats'][j]['xProfile'],5)[0:5]) #Find the position of the 5 highest values
+            #peakpos[j]=t[ind]
             
             #quadratic fit around 5 pixels method
             central=np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])
@@ -417,10 +417,7 @@ class ShotToShotCharacterization(object):
         dt=abs(self._eventresultsstep2['PU']['xfsPerPix'])
         df=1/(dt*N)
         
-        if(N%2==0):
-            f=np.array(range(0,N/2)+range(-N/2,0))*df
-        else:
-            f=np.array(range(0,N/2+1)+range(-N/2,0))*df
+        f=np.array(range(0,N/2+1)+range(-N/2+1,0))*df
                            
         ffilter=(1-np.exp(-(f*targetwidthfs)**6))
           
@@ -433,11 +430,11 @@ class ShotToShotCharacterization(object):
             profilef=np.fft.ifft(np.fft.fft(profilef)*ffilter)
         
             #highest value method
-            peakpos[j]=t[np.argmax(profilef)]
+            #peakpos[j]=t[np.argmax(profilef)]
             
             #five highest values method
-            ind=np.mean(np.argpartition(-profilef,5)[0:5]) #Find the position of the 5 highest values
-            peakpos[j]=t[ind]
+            #ind=np.mean(np.argpartition(-profilef,5)[0:5]) #Find the position of the 5 highest values
+            #peakpos[j]=t[ind]
             
             #quadratic fit around 5 pixels method and then fit to the original signal
             central=np.argmax(profilef)
