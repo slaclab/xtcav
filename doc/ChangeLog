@@ -11,6 +11,11 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-05
+2014-02-23 Christopher O'Grady
+- From Alvaro: Solved bug making the inter bunch delay function fail
+  for vectors with an odd number of elements
+
 Tag: V00-00-04
 2014-02-20 Christopher O'Grady
 - The latest changes from Alvaro:
