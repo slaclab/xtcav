@@ -100,7 +100,9 @@ class GenerateLasingOffReference(object):
             for t in range(len(times)-1,-1,-1): #Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
                 evt=run.event(times[t])
 
-                ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)        
+                ebeam = evt.get(psana.Bld.BldDataEBeamV7,ebeam_data)
+                if not ebeam:
+                    ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)
                 if not ebeam:
                     ebeam = evt.get(psana.Bld.BldDataEBeamV5,ebeam_data)
 

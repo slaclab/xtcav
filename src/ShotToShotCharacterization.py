@@ -160,7 +160,9 @@ class ShotToShotCharacterization(object):
             True: All the input form detectors necessary for a good reconstruction are present in the event. 
             False: The information from some detectors is missing for that event. It may still be possible to get information.
         """
-        ebeam = evt.get(psana.Bld.BldDataEBeamV6,self.ebeam_data)   
+        ebeam = evt.get(psana.Bld.BldDataEBeamV7,self.ebeam_data)   
+        if not ebeam:
+            ebeam = evt.get(psana.Bld.BldDataEBeamV6,self.ebeam_data)  
         if not ebeam:
             ebeam = evt.get(psana.Bld.BldDataEBeamV5,self.ebeam_data)  
         gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,self.gasdetector_data) 

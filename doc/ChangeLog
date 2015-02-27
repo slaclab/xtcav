@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-06
+2014-02-26 Christopher O'Grady
+- Support ebeamv7
+
 Tag: V00-00-05
 2014-02-23 Christopher O'Grady
 - From Alvaro: Solved bug making the inter bunch delay function fail
