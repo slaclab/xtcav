@@ -52,7 +52,7 @@ class ShotToShotCharacterization(object):
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
         self._eventresultsstep3=[]
-        self._datasource=[]
+        self._env=[]
         self._globalcalibration=[]
         self._roixtcav=[]
         self._calpath=''
@@ -64,7 +64,7 @@ class ShotToShotCharacterization(object):
         self._currenteventprocessedstep1=False   #Step one is pure processing of the trace, without lasing off referencing
         self._currenteventprocessedstep2=False   #Step two is calculating physical units
         self._currenteventprocessedstep3=False   #Step three is the processing of the profiles with respect to the reference
-        self._datasourceinfo=False      
+        self._envinfo=False      
 
         #Camera and type for the xtcav images
         self.xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
@@ -86,7 +86,7 @@ class ShotToShotCharacterization(object):
         Returns: True if successful, False otherwise        
         """
         if not self._darkreferencepath:
-            cp=CalibrationPaths(self._datasource,self._calpath)       
+            cp=CalibrationPaths(self._env,self._calpath)       
             self._darkreferencepath=cp.findCalFileName('pedestals',self._currentevent.run())
             
         #If we could not find it, we just wont use it, and return False
@@ -107,7 +107,7 @@ class ShotToShotCharacterization(object):
         Returns: True if successful, False otherwise        
         """
         if not self._lasingoffreferencepath:
-            cp=CalibrationPaths(self._datasource,self._calpath)     
+            cp=CalibrationPaths(self._env,self._calpath)     
             self._lasingoffreferencepath=cp.findCalFileName('lasingoffreference',self._currentevent.run())
             
         #If we could not find it, we load default parameters, and return False
@@ -195,15 +195,17 @@ class ShotToShotCharacterization(object):
             return False
         
     def SetDataSource(self,datasource):
+        self.SetEnv(datasource.env())
+    def SetEnv(self,env):
         """
-        After creating an instance of the ShotToShotCharacterization class, it is necessary to pass the dataSource object for that data that is being analysed.
+        After creating an instance of the ShotToShotCharacterization class, it is necessary to pass the env object for that data that is being analysed.
 
         Args:
-            datasource (Datasource object): DataSource object that is going to be used for the analysis.
+            env (Env object): Env object that is going to be used for the analysis.
             
         """
-        self._datasource=datasource
-        self._datasourceinfo=False    
+        self._env=env
+        self._envinfo=False    
         
     def ProcessShotStep1(self):
         """
@@ -216,13 +218,13 @@ class ShotToShotCharacterization(object):
             return False
   
         #It is important that this is open first so the experiment name is set properly (important for loading references)   
-        if not self._datasourceinfo:
-            self._experiment=self._datasource.env().experiment()
-            epicsstore=self._datasource.env().epicsStore();
+        if not self._envinfo:
+            self._experiment=self._env.experiment()
+            epicsstore=self._env.epicsStore();
             self._globalCalibration,ok1=xtu.GetGlobalXTCAVCalibration(epicsstore)
             self._roixtcav,ok2=xtu.GetXTCAVImageROI(epicsstore) 
             if ok1 and ok2: #If the information is not good, we try next event
-                self._datasourceinfo=True
+                self._envinfo=True
             else:
                 return False
 

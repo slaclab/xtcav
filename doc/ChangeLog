@@ -11,6 +11,11 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-07
+2014-02-27 Christopher O'Grady
+- Add interface ShotToShotCharacterization::SetEnv, which
+  can be used like SetDataSource, but is usable from modules
+
 Tag: V00-00-06
 2014-02-26 Christopher O'Grady
 - Support ebeamv7
