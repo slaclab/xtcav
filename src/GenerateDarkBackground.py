@@ -104,7 +104,7 @@ class GenerateDarkBackground(object):
         else:
             validityrange=self._validityrange
             
-        cp=CalibrationPaths(dataSource,self._calpath)
+        cp=CalibrationPaths(dataSource.env(),self._calpath)
         file=cp.newCalFileName('pedestals',validityrange[0],validityrange[1])
         
         db.Save(file)

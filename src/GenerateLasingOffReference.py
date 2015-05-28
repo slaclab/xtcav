@@ -126,7 +126,7 @@ class GenerateLasingOffReference(object):
                 #If we have not loaded the dark background information yet, we do
                 if not 'db' in locals():
                     if not self._darkreferencepath:
-                        cp=CalibrationPaths(dataSource,self._calpath)       
+                        cp=CalibrationPaths(dataSource.env(),self._calpath)
                         self._darkreferencepath=cp.findCalFileName('pedestals',evt.run())
                         
                     if not self._darkreferencepath:
