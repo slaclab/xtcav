@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-09
+2014-05-29 Christopher O'Grady
+- Missed one of the calls to CalibrationPaths.
+
 Tag: V00-00-08
 2014-05-28 Christopher O'Grady
 - Fix GenerateDarkBackground.py and GenerateLasingOffReference.py
