@@ -206,7 +206,7 @@ class GenerateLasingOffReference(object):
         else:
             validityrange=self._validityrange
             
-        cp=CalibrationPaths(dataSource,self._calpath)
+        cp=CalibrationPaths(dataSource.env(),self._calpath)
         file=cp.newCalFileName('lasingoffreference',validityrange[0],validityrange[1])
                 
         lor.Save(file)
