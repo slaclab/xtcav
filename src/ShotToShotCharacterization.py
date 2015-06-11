@@ -285,8 +285,10 @@ class ShotToShotCharacterization(object):
         imageStats=self._eventresultsstep1['imageStats'];
         ROI=self._eventresultsstep1['ROI']
                   
-        PU=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,self._globalCalibration) #Obtain the physical units for the axis x and y, in fs and MeV
-        
+        PU, ok=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,self._globalCalibration) #Obtain the physical units for the axis x and y, in fs and MeV
+        if not ok: #If the information is not good, we skip the event
+            return False
+
         #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles     
         if PU['xfsPerPix']<0:
             PU['xfs']=PU['xfs'][::-1]
@@ -419,6 +421,8 @@ class ShotToShotCharacterization(object):
         #Preparing the low pass filter
         N=len(t)
         dt=abs(self._eventresultsstep2['PU']['xfsPerPix'])
+        if dt*N==0:
+            return [],False
         df=1/(dt*N)
         
         f=np.array(range(0,N/2+1)+range(-N/2+1,0))*df

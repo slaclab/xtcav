@@ -87,6 +87,7 @@ class GenerateLasingOffReference(object):
         listImageStats=[];
         listShotToShot=[];
         listROI=[];
+        listPU=[]
  
         runs=numpy.array([],dtype=int) #Array that contains the run processed run numbers
         #for r,run in enumerate(dataSource.runs()):
@@ -167,11 +168,23 @@ class GenerateLasingOffReference(object):
                         continue
                     imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
 
-                                                                                                                       
-                                                                     
+                    PU,ok=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,globalCalibration)   
+                    if not ok:
+                        continue
+
+                    #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
+                    if PU['xfsPerPix']<0:
+                        PU['xfs']=PU['xfs'][::-1]
+                        NB=len(imageStats)
+                        for j in range(NB):
+                            imageStats[j]['xProfile']=imageStats[j]['xProfile'][::-1]
+                            imageStats[j]['yCOMslice']=imageStats[j]['yCOMslice'][::-1]
+                            imageStats[j]['yRMSslice']=imageStats[j]['yRMSslice'][::-1]                                               
+                                                                                                                                                                                            
                     listImageStats.append(imageStats)
                     listShotToShot.append(shotToShot)
                     listROI.append(ROI)
+                    listPU.append(PU)
                     
                     n=n+1
                     n_r=n_r+1            
@@ -181,7 +194,7 @@ class GenerateLasingOffReference(object):
                     break
                
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
-        averagedProfiles = xtu.AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,globalCalibration,self._groupsize);     
+        averagedProfiles = xtu.AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,self._groupsize);     
 
         lor=LasingOffReference()
         lor.averagedProfiles=averagedProfiles

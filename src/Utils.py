@@ -368,14 +368,14 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     
     return pulsecharacterization
     
-def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,globalCalibration,shotsPerGroup):
+def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shotsPerGroup):
     """
     Find the subroi of the image
     Arguments:
       listROI: list with the axis for all the XTCAV non lasing profiles to average
       listImageStats: list of the statistics (profiles) for all the XTCAV non lasing profiles to average
       listShotToShot: list of the shot to shot properties structures for each profile
-      globalCalibration: global calibration structure for xtcav
+      listPU: list of the physical units
       shotsPerGroup
     Output
       averagedProfiles: list with the averaged reference of the reference for each group 
@@ -385,29 +385,18 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,globalCalib
     NB=len(listImageStats[0])       #Number of bunches
     NG=int(np.floor(N/shotsPerGroup))   #Number of groups to make
             
-    listPU=[]                       #List for the physical units for each profile
     
     # Obtain physical units and calculate time vector   
     maxt=0          #Set an initial maximum, minimum and increment value for the master time vector
     mint=0
     mindt=1000
 
-    #For each profile obtain the physical units
+    #We find adequate values for the master time
     for i in range(N):
-        PU=CalculatePhysicalUnits(listROI[i],[listImageStats[i][0]['xCOM'],listImageStats[i][0]['yCOM']],listShotToShot[i],globalCalibration)   
-        #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
-        if PU['xfsPerPix']<0:
-            PU['xfs']=PU['xfs'][::-1]
-            for j in range(NB):
-                listImageStats[i][j]['xProfile']=listImageStats[i][j]['xProfile'][::-1]
-                listImageStats[i][j]['yCOMslice']=listImageStats[i][j]['yCOMslice'][::-1]
-                listImageStats[i][j]['yRMSslice']=listImageStats[i][j]['yRMSslice'][::-1]                                               
-        listPU.append(PU)      
-
         #We compare and update the maximum, minimum and increment value for the master time vector
-        maxt=np.amax([maxt,np.amax(PU['xfs'])])
-        mint=np.amin([mint,np.amin(PU['xfs'])])
-        mindt=np.amin([mindt,np.abs(PU['xfsPerPix'])])
+        maxt=np.amax([maxt,np.amax(listPU[i]['xfs'])])
+        mint=np.amin([mint,np.amin(listPU[i]['xfs'])])
+        mindt=np.amin([mindt,np.abs(listPU[i]['xfsPerPix'])])
             
     #Obtain the number of electrons in each shot
     eCharge=1.60217657e-19          #Electron charge in coulombs
@@ -577,8 +566,10 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
       shottoShot: structure with the properties of the specific shot
       globalCalibration: structure with the global calibration for the xtcav
     Output:
-      outimage: 3d numpy array with the split image image where the first index is the bunch indesx, the second index correspond to y, and the third index corresponds to x
+      physicalUnits: structure with the relevant physical units
+      ok: if all the data was retrieved correctly
     """
+    ok=1
  
     umperpix=globalCalibration['umperpix']
     dumpe=globalCalibration['dumpe']
@@ -594,7 +585,16 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
     
     xfsPerPix = -umperpix*rfampcalib/(0.3*strstrength*rfamp);     #Spacing of the x axis in fs (this can be negative)
     
-    signflip = round(math.cos((rfphasecalib-rfphase)*math.pi/180)); #It may need to be flipped depending on the phase
+    cosphasediff=math.cos((rfphasecalib-rfphase)*math.pi/180)
+
+    #If the cosine of phase was too close to 0, we return warning and error
+    if np.abs(cosphasediff)<0.5:
+        warnings.warn_explicit('The phase of the bunch with the RF field is far from 0 or 180 degrees',UserWarning,'XTCAV',0)
+        ok=0
+
+    signflip = np.sign(cosphasediff); #It may need to be flipped depending on the phase
+
+    
     xfsPerPix = signflip*xfsPerPix;    
     
     xfs=xfsPerPix*(ROI['x']-center[0])                  #x axis in fs around the center of mass
@@ -609,7 +609,7 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
         }
            
            
-    return physicalUnits
+    return physicalUnits,ok
 
 def GetGlobalXTCAVCalibration(epicsStore):
     """
