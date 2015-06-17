@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-10
+2014-06-17 Christopher O'Grady
+- A fix from Alvaro for the calculation of a phase.
+
 Tag: V00-00-09
 2014-05-29 Christopher O'Grady
 - Missed one of the calls to CalibrationPaths.
