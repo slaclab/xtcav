@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-11
+2014-07-06 Mihir Mongia
+Add contour split method to split multiple bunches
+
 Tag: V00-00-10
 2014-06-17 Christopher O'Grady
 - A fix from Alvaro for the calculation of a phase.

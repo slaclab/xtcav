@@ -35,7 +35,7 @@ class GenerateLasingOffReference(object):
 
 
     def __init__(self):
-    
+        self._islandSplitMethod = 'scipyLabel'
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
@@ -53,7 +53,7 @@ class GenerateLasingOffReference(object):
         self._roiwaistthres=0.2         #Parameter for the roi location
         self._roiexpand=2.5             #Parameter for the roi location
         self._calpath=''
-
+        
     def Generate(self):
         """
         After setting all the parameters, this method has to be called to generate the lasing off reference and save it in the proper location. It not set, the validity range for the reference will go from the first run number used to generate the reference and the last run.
@@ -64,7 +64,7 @@ class GenerateLasingOffReference(object):
         print '\t Number of bunches: %d' % self._nb
         print '\t Valid shots to process: %d' % self._maxshots
         print '\t Dark reference run: %s' % self._darkreferencepath
-
+        
         #Loading the data, this way of working should be compatible with both xtc and hdf5 files
         dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self._experiment,self._runs))
 
@@ -163,7 +163,8 @@ class GenerateLasingOffReference(object):
                     if not ok:                                        #If there is nothing in the image we skip the event  
                         continue
                     img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-                    img=xtu.SplitImage(img,self._nb)
+                    img=xtu.SplitImage(img,self._nb,self._islandSplitMethod)
+                    
                     if self._nb!=img.shape[0]:
                         continue
                     imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
@@ -209,7 +210,8 @@ class GenerateLasingOffReference(object):
             'medianfilter':self._medianfilter,
             'snrfilter':self._snrfilter,
             'roiwaistthres':self._roiwaistthres,
-            'roiexpand':self._roiexpand
+            'roiexpand':self._roiexpand,
+            'islandSplitMethod':self._islandSplitMethod
         }
         
         lor.parameters=parameters
@@ -296,4 +298,9 @@ class GenerateLasingOffReference(object):
     @calibrationpath.setter
     def calibrationpath(self, calpath):
         self._calpath = calpath
-    
+    @property
+    def islandSplitMethod(self):
+        return self._islandSplitMethod
+    @maxshots.setter
+    def islandSplitMethod(self, islandSplitMethod):
+        self._islandSplitMethod = islandSplitMethod 

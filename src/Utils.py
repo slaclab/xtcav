@@ -13,6 +13,8 @@ import scipy.ndimage as im
 import scipy.io
 import math
 import IPython
+#Mihir Added Line Below
+import cv2
 
 
 def ProcessXTCAVImage(image,ROI):
@@ -127,7 +129,7 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
     maxY=(ROI['y0']+ROI['yN']-1)-ROI_db['y0'];    
     
     image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
-        
+       
     return image,ROI
 
     
@@ -767,7 +769,7 @@ def ShotToShotParameters(ebeam,gasdetector):
        
     return shotToShot,ok               
     
-def SplitImage(image, n):
+def SplitImage(image, n, islandSplitMethod):
     """
     Split an XTCAV image depending of different bunches, this function is still to be programmed properly
     Arguments:
@@ -777,18 +779,25 @@ def SplitImage(image, n):
       outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
     """
     
+   
     if n==1:    #For one bunch, just the same image
         outimage=np.zeros((n,image.shape[0],image.shape[1]))
         outimage[0,:,:]=image    
     elif n==2:  #For two bunches,  the image on the top and on the bottom of the center of mass
         
+        
         #outimage=HorizontalLineSplitting(image[0,:,:]) 
         #outimage=OptimalSplittingLine(image[0,:,:])           
-
-        outimage=IslandSplitting(image,2)
+        if islandSplitMethod == 'contourLabel':   
+            outimage = IslandSplittingContour(image)
+        else:
+            outimage = IslandSplitting(image,2)
+    
         
     else:       #In any other case just copies of the image, for debugging purposes
         outimage=IslandSplitting(image,n)
+    
+     
     
     return outimage
     
@@ -999,5 +1008,113 @@ def IslandSplitting(image,N):
         
     #Renormalize to total area of 1
     outimages=outimages/np.sum(outimages)
+    
+    return outimages
+
+def IslandSplittingContour(image):
+    
+    data = image
+    k = 0 
+    indicator = 0
+    while indicator == 0:
+        h = data>k
+        labelled_array , num_features = im.measurements.label(h)
+        count =np.zeros(num_features)
+
+        for g in range(1,num_features):
+            temp = sum(sum(labelled_array==g))
+            count[g] = temp
+
+        idx = (-count).argsort()[:2]
+        var1 = sum(sum(labelled_array==idx[0]))
+        var2 = sum(sum(labelled_array==idx[1]))
+
+        if var1 > 1000 and var2 > 1000:
+            indicator =1
+        k = k + .000002
+   
+    j1 = (labelled_array == idx[0])
+    j2 = (labelled_array == idx[1])
+    j1 = j1.astype(np.uint8)
+    j2 = j2.astype(np.uint8)
+    contours1, hierarchy1 = cv2.findContours(j1,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
+    contours2, hierarchy2 = cv2.findContours(j2,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
+
+    j1 = (j1>1)
+    j2 = (j2>1)
+
+    t1 = np.nonzero(j1)
+    t2 = np.nonzero(j2)
+    labelled_array = np.matrix(labelled_array)
+    copy = labelled_array
+
+    t1 = np.matrix(t1)
+    t2 = np.matrix(t2)
+
+    t1 = t1.T
+    t2 = t2.T
+
+    innerTrial1 =np.zeros(shape = (t1.shape[0],1,))
+    for k in range(0,t1.shape[0]):
+        innerTrial1[k] = t1[k]*t1[k].T
+         
+    innerTrial2 = np.zeros(shape = (t2.shape[0],1,))
+    for k in range(0,t2.shape[0]):
+        innerTrial2[k] = t2[k]*t2[k].T
+
+    for p in range(1,num_features):
+        if p!=idx[0]:
+            if p!=idx[1]:
+                t = np.nonzero((copy == p))
+                t = [t[0][0,0], t[1][0,0]]
+                t= np.matrix(t)
+                t = t.T
+                
+                temp1 = innerTrial1 - 2 * t1 * t
+                temp2 = innerTrial2 - 2 * t2 * t
+                temp1 =np.amin(temp1)
+                temp2 =np.amin(temp2)
+                if temp1 < temp2:
+                    labelled_array[labelled_array==p]=idx[0]
+                else:
+                    labelled_array[labelled_array==p]=idx[1]
+
+    if k>0:
+        g = np.matrix(data)
+        temp = (labelled_array<1)
+        temp = temp.astype(int)
+        dent = np.multiply(g,temp)
+        labelled_array2 , num_features2 = im.measurements.label(dent)
+        copy = labelled_array2
+
+
+        for p in range( 1, num_features2):
+            t = np.nonzero((copy ==p))
+            t = [t[0][0], t[1][0]]
+            t = np.matrix(t)
+            t = t.T
+           
+            temp1 = innerTrial1 - 2 * t1 * t
+            temp2 = innerTrial2 - 2 * t2 * t
+            temp1 = np.amin(temp1)
+            temp2 = np.amin(temp2)
+            if temp1 < temp2:
+                labelled_array[labelled_array2==p]=idx[0]
+            else:
+                labelled_array[labelled_array2==p]=idx[1]
+
+   
+ 
+    Nx=image.shape[1]
+    Ny=image.shape[0]
+    outimages=np.zeros((2,Ny,Nx))
+    temp = (labelled_array == idx[0])
+    temp = temp.astype(int)
+    outimages[0,:,:]=np.multiply(g,temp)
+    
+    temp = (labelled_array == idx[1])
+    temp = temp.astype(int)
+    outimages[1,:,:]=np.multiply(g,temp)
+    
     
     return outimages

@@ -251,7 +251,16 @@ class ShotToShotCharacterization(object):
             return False
 
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        img=xtu.SplitImage(img,self._nb)
+        if self._loadedlasingoffreference == True:
+            if 'islandSplitMethod' in self._lasingoffreference.parameters:
+                img=xtu.SplitImage(img,self._nb, self._lasingoffreference.parameters['islandSplitMethod'])
+            else:
+                img=xtu.SplitImage(img,self._nb,'scipyLabel')
+        else:
+            img=xtu.SplitImage(img,self._nb,'scipyLabel')
+            
+        
+
         imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
         
         #Save the results of the step 1
