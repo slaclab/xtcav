@@ -29,6 +29,7 @@ class ShotToShotCharacterization(object):
         snrfilter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
+        islandSplitMethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
     """
 
     def __init__(self):
@@ -48,6 +49,7 @@ class ShotToShotCharacterization(object):
         self._snrfilter=float('nan')             #Number of sigmas for the noise threshold
         self._roiwaistthres=float('nan')         #Parameter for the roi location
         self._roiexpand=float('nan')             #Parameter for the roi location
+        self._islandSplitMethod=''               #Method for island splitting
         self._currentevent=[]
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
@@ -131,6 +133,8 @@ class ShotToShotCharacterization(object):
             self._roiexpand=self._lasingoffreference.parameters['roiexpand']
         if not self._darkreferencepath:
             self._darkreferencepath=self._lasingoffreference.parameters['darkreferencepath']
+        if not self._islandSplitMethod:
+            self._islandSplitMethod=self._lasingoffreference.parameters.get('islandSplitMethod','scipylabel')
             
         return True
             
@@ -148,6 +152,8 @@ class ShotToShotCharacterization(object):
             self._roiwaistthres=0.2
         if math.isnan(self._roiexpand):
             self._roiexpand=2.5    
+        if not self._islandSplitMethod:
+            self._islandSplitMethod='scipylabel'
                            
     def SetCurrentEvent(self,evt):
         """
@@ -253,7 +259,7 @@ class ShotToShotCharacterization(object):
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
         if self._loadedlasingoffreference == True:
             if 'islandSplitMethod' in self._lasingoffreference.parameters:
-                img=xtu.SplitImage(img,self._nb, self._lasingoffreference.parameters['islandSplitMethod'])
+                img=xtu.SplitImage(img,self._nb, self._islandSplitMethod)
             else:
                 img=xtu.SplitImage(img,self._nb,'scipyLabel')
         else:
@@ -645,6 +651,20 @@ class ShotToShotCharacterization(object):
             
         return self._eventresultsstep1['processedImage'],True
         
+    def ProcessedXTCAVImageROI(self):    
+        """
+        Method which returns the position of the processed XTCAV image within the whole CCD after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
+
+        Returns: 
+            out1: Dictionary with the region of interest parameters.
+            out2: True if the retrieval was successful, False otherwise.
+        """     
+        if not self._currenteventprocessedstep1:
+            if not self.ProcessShotStep1():
+                return [],False
+            
+        return self._eventresultsstep1['ROI'],True
+        
     def ReconstructionAgreement(self): 
         """
         Value for the agreement of the reconstruction using the RMS method and using the COM method. It consists of a value ranging from -1 to 1.
@@ -689,4 +709,10 @@ class ShotToShotCharacterization(object):
     @calibrationpath.setter
     def calibrationpath(self, calpath):
         self._calpath = calpath       
+    @property
+    def islandSplitMethod(self):
+        return self._islandSplitMethod
+    @islandSplitMethod.setter
+    def islandSplitMethod(self, islandSplitMethod):
+        self._islandSplitMethod = islandSplitMethod 
         

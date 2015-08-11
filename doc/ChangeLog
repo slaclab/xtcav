@@ -11,6 +11,13 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Changes since last tagged version:
+
+-Modified how the islandSplitMethod is set for the shot to shot characterization, so the user can override the version set for the lasing off references.
+-Added method ProcessedXTCAVImageROI returning the position of the ProcessedXTAV image after cropping within the full CCD.
+-Parallelization of the lasing off generation process. The countour method for the island splitting method for the island splitting seems to improve things, but much computationally slower, so now we need parallel processing even for this. This has been done by Charles Olivier and Paul Micaelli.
+-Added docstring to IslandSplittingContour
+
 Tag: V00-00-11
 2014-07-06 Mihir Mongia
 Add contour split method to split multiple bunches

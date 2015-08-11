@@ -1,5 +1,5 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
-
+# revised 31/07/15 by andr0s & polo5 to include parallel processing
 import os
 import time
 import psana
@@ -15,6 +15,14 @@ from DarkBackground import *
 from LasingOffReference import *
 from CalibrationPaths import *
 
+# PP imports
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+print 'Core %s ... ready' % (rank + 1) # useful for debugging purposes
+sys.stdout.flush()
+
 class GenerateLasingOffReference(object):
     """
     Class that generates a set of lasing off references for XTCAV reconstruction purposes
@@ -29,29 +37,30 @@ class GenerateLasingOffReference(object):
         groupsize (int): Number of profiles to average together for each reference.
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace.
-
+        islandSplitMethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
     """
         
 
 
     def __init__(self):
-        self._islandSplitMethod = 'scipyLabel'
+        
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
     
         #Some default values for the options
-        self._experiment='amoc8114'     #Experiment label
-        self._maxshots=401              #Maximum number of valid shots to process
-        self._runs='86'                 #Runs
+        self._experiment='amoc8114'             #Experiment label
+        self._maxshots=401                      #Maximum number of valid shots to process
+        self._runs='86'                         #Runs
         self._validityrange=[]
-        self._darkreferencepath=[];         #Dark reference information
-        self._nb=1                      #Number of bunches
-        self._groupsize=5               #Number of profiles to average together
-        self._medianfilter=3            #Number of neighbours for median filter
-        self._snrfilter=10              #Number of sigmas for the noise threshold
-        self._roiwaistthres=0.2         #Parameter for the roi location
-        self._roiexpand=2.5             #Parameter for the roi location
+        self._darkreferencepath=[];             #Dark reference information
+        self._nb=1                              #Number of bunches
+        self._groupsize=5                       #Number of profiles to average together
+        self._medianfilter=3                    #Number of neighbours for median filter
+        self._snrfilter=10                      #Number of sigmas for the noise threshold
+        self._roiwaistthres=0.2                 #Parameter for the roi location
+        self._roiexpand=2.5                     #Parameter for the roi location
+        self._islandSplitMethod = 'scipyLabel'  #Method for island splitting
         self._calpath=''
         
     def Generate(self):
@@ -98,8 +107,21 @@ class GenerateLasingOffReference(object):
             n_r=0 #Counter for the total number of xtcav images processed within the run        
             #for e, evt in enumerate(run.events()):
             times = run.times()
-            for t in range(len(times)-1,-1,-1): #Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
-                evt=run.event(times[t])
+
+            #  Parallel Processing implementation by andr0s and polo5
+            #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
+            #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
+            
+            ns = len(times) #  The number of shots in this run
+            tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:
+            comb1 = np.tile(tiling, np.ceil(ns/(4.*size)))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]
+            comb2 = np.repeat(np.arange(0, np.ceil(ns/(4.*size)), 1), 4) # returns [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, ...]
+            #  list of shot numbers assigned to this core
+            main = comb2*4*size + comb1  # returns [  0.   1.   2.   3.  16.  17.  18.  19.  32.  33. ... ]
+            main = np.delete(main, np.where(main>=ns))  # remove element if greater or equal to maximum number of shots in run
+            current_shot = 0
+            for t in main[::-1]: #  Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
+                evt=run.event(times[int(t)])
 
                 ebeam = evt.get(psana.Bld.BldDataEBeamV7,ebeam_data)
                 if not ebeam:
@@ -188,12 +210,44 @@ class GenerateLasingOffReference(object):
                     listPU.append(PU)
                     
                     n=n+1
-                    n_r=n_r+1            
-                    print "%d/%d" % (n_r,self._maxshots) #Debugging purposes, will be removed             
-                                                                  
-                if n_r>=self._maxshots: #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
-                    break
-               
+                    n_r=n_r+1
+                    # print core numb and percentage
+
+                    if current_shot % 5 == 0:
+                        print 'Core %d: %.1f %% done, %d / %d' % (rank + 1, float(current_shot) / np.ceil(self._maxshots/float(size)) *100, current_shot, np.ceil(self._maxshots/float(size)))
+                        sys.stdout.flush()
+                    current_shot += 1
+                    if current_shot >= np.ceil(self._maxshots/float(size)):
+                        break
+
+        #  here gather all shots in one core, add all lists
+        exp = {'listImageStats': listImageStats, 'listShotToShot': listShotToShot, 'listROI': listROI, 'listPU': listPU}
+        processedlist = comm.gather(exp, root=0)
+        
+        if rank != 0:
+            return
+        
+        listImageStats = []
+        listShotToShot = []
+        listROI = []
+        listPU = []
+        
+        for i in range(size):
+            p = processedlist[i]
+            listImageStats += p['listImageStats']
+            listShotToShot += p['listShotToShot']
+            listROI += p['listROI']
+            listPU += p['listPU']
+            
+        #Since there are 12 cores it is possible that there are more references than needed. In that case we discard some
+        n=len(listImageStats)
+        if n>self._maxshots:
+            n=self._maxshots
+            listImageStats=listImageStats[0:n]
+            listShotToShot=listShotToShot[0:n]
+            listROI=listROI[0:n]
+            listPU=listPU[0:n]
+            
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
         averagedProfiles = xtu.AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,self._groupsize);     
 
@@ -201,6 +255,8 @@ class GenerateLasingOffReference(object):
         lor.averagedProfiles=averagedProfiles
         lor.runs=runs
         lor.n=n
+        
+        # n should be consistent with len(final list)
         
         parameters= {
             'version' : 0,
@@ -301,6 +357,6 @@ class GenerateLasingOffReference(object):
     @property
     def islandSplitMethod(self):
         return self._islandSplitMethod
-    @maxshots.setter
+    @islandSplitMethod.setter
     def islandSplitMethod(self, islandSplitMethod):
         self._islandSplitMethod = islandSplitMethod 

@@ -1012,6 +1012,19 @@ def IslandSplitting(image,N):
     return outimages
 
 def IslandSplittingContour(image):
+    """
+    Find islands using the contour method in the picture and order them by area, returning two islands, ordered by area.
+      1. Iteratively threshold the image (increase the the threshold level) up until the point that we have 2 big bunches
+      2. Then use the labeling function in opencv to find how many contiguous groups exist in the data. 
+      3. Then using the contours function in opencv, we find the pixels that correspond to the contours of each of the 2 big bunches.
+      4. For each contiguous object D that is not one of the 2 big bunches, we take one representative pixel from D and calculate which contour it is closest to. We then give D the same label as the contour it is closest to.
+      5. After this, we have still not labelled the non-zero pixels that were excluded due to thresholding(picture attached)
+      6. We then repeat steps 2 and 4 on these points.
+    Arguments:
+      image: 2d numpy array with the image where the first index correspond to y, and thesecond index corresponds to x
+    Output:
+      outimages: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+    """
     
     data = image
     k = 0 
