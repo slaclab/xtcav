@@ -37,13 +37,12 @@ class GenerateLasingOffReference(object):
         groupsize (int): Number of profiles to average together for each reference.
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace.
-        islandSplitMethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
+        islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
     """
         
 
 
     def __init__(self):
-        
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
@@ -60,7 +59,9 @@ class GenerateLasingOffReference(object):
         self._snrfilter=10                      #Number of sigmas for the noise threshold
         self._roiwaistthres=0.2                 #Parameter for the roi location
         self._roiexpand=2.5                     #Parameter for the roi location
-        self._islandSplitMethod = 'scipyLabel'  #Method for island splitting
+        self._islandsplitmethod = 'scipyLabel'  #Method for island splitting
+        self._ratio1 = 3.0                      #Ratio between number of pixels between largest and second largest groups when calling scipy.label
+        self._ratio2 = 5.0                      #Ratio between number of pixels between second/third largest groups when calling scipy.label
         self._calpath=''
         
     def Generate(self):
@@ -185,8 +186,8 @@ class GenerateLasingOffReference(object):
                     if not ok:                                        #If there is nothing in the image we skip the event  
                         continue
                     img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-                    img=xtu.SplitImage(img,self._nb,self._islandSplitMethod)
-                    
+                    img = xtu.SplitImage(img,self._nb,self._islandsplitmethod,self._ratio1,self._ratio2)#new
+
                     if self._nb!=img.shape[0]:
                         continue
                     imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
@@ -267,11 +268,13 @@ class GenerateLasingOffReference(object):
             'snrfilter':self._snrfilter,
             'roiwaistthres':self._roiwaistthres,
             'roiexpand':self._roiexpand,
-            'islandSplitMethod':self._islandSplitMethod
+            'islandsplitmethod':self._islandsplitmethod,
+            'ratio1':self._ratio1,
+            'ratio2':self._ratio2,
         }
         
-        lor.parameters=parameters
         
+        lor.parameters=parameters
         if not self._validityrange:
             validityrange=[runs[0], 'end']
         else:
@@ -355,8 +358,21 @@ class GenerateLasingOffReference(object):
     def calibrationpath(self, calpath):
         self._calpath = calpath
     @property
-    def islandSplitMethod(self):
-        return self._islandSplitMethod
-    @islandSplitMethod.setter
-    def islandSplitMethod(self, islandSplitMethod):
-        self._islandSplitMethod = islandSplitMethod 
+    def islandsplitmethod(self):
+        return self._islandsplitmethod
+    @islandsplitmethod.setter
+    def islandsplitmethod(self, islandsplitmethod):
+        self._islandsplitmethod = islandsplitmethod 
+    @property
+    def ratio1(self):
+        return self._ratio1
+    @ratio1.setter
+    def ratio1(self, ratio1):
+        self._ratio1 = ratio1 
+    @property
+    def ratio2(self):
+        return self._ratio2
+    @ratio2.setter
+    def ratio2(self, ratio2):
+        self._ratio2 = ratio2
+

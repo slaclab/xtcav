@@ -769,7 +769,8 @@ def ShotToShotParameters(ebeam,gasdetector):
        
     return shotToShot,ok               
     
-def SplitImage(image, n, islandSplitMethod):
+
+def SplitImage(image, n, islandsplitmethod,par1,par2):
     """
     Split an XTCAV image depending of different bunches, this function is still to be programmed properly
     Arguments:
@@ -788,12 +789,11 @@ def SplitImage(image, n, islandSplitMethod):
         
         #outimage=HorizontalLineSplitting(image[0,:,:]) 
         #outimage=OptimalSplittingLine(image[0,:,:])           
-        if islandSplitMethod == 'contourLabel':   
-            outimage = IslandSplittingContour(image)
+        if islandsplitmethod == 'contourLabel':   
+            outimage = IslandSplittingContour(image,par1,par2)
         else:
             outimage = IslandSplitting(image,2)
-    
-        
+
     else:       #In any other case just copies of the image, for debugging purposes
         outimage=IslandSplitting(image,n)
     
@@ -1011,7 +1011,7 @@ def IslandSplitting(image,N):
     
     return outimages
 
-def IslandSplittingContour(image):
+def IslandSplittingContour(image,ratio1,ratio2):
     """
     Find islands using the contour method in the picture and order them by area, returning two islands, ordered by area.
       1. Iteratively threshold the image (increase the the threshold level) up until the point that we have 2 big bunches
@@ -1027,30 +1027,31 @@ def IslandSplittingContour(image):
     """
     
     data = image
-    k = 0 
-    indicator = 0
-    while indicator == 0:
-        h = data>k
-        labelled_array , num_features = im.measurements.label(h)
+    k = 0  # initial threshold
+    indicator = 0 # indicating that we do not yet have a satisfactory threshhold value
+    while indicator == 0:  
+        h = data>k # threshhold image
+        labelled_array , num_features = im.measurements.label(h) #label blobs in images
         count =np.zeros(num_features)
 
         for g in range(1,num_features):
-            temp = sum(sum(labelled_array==g))
+            temp = sum(sum(labelled_array==g)) #count number of pixels associated with each blob 
             count[g] = temp
 
-        idx = (-count).argsort()[:2]
+        idx = (-count).argsort()[:3] #calculates 3 largest blobs.blob1,blob2, blob3
         var1 = sum(sum(labelled_array==idx[0]))
         var2 = sum(sum(labelled_array==idx[1]))
+        var3 = sum(sum(labelled_array==idx[2]))
 
-        if var1 > 1000 and var2 > 1000:
+        if var1/var2 < ratio1 and var2/var3 > ratio2:#if blob1 and blob2 are approximately same size and blob2 is significantly bigger than blob3, then proceed. blob1>blob2>blob3 
             indicator =1
         k = k + .000002
    
     j1 = (labelled_array == idx[0])
     j2 = (labelled_array == idx[1])
-    j1 = j1.astype(np.uint8)
+    j1 = j1.astype(np.uint8)#convert from false/true to integer values
     j2 = j2.astype(np.uint8)
-    contours1, hierarchy1 = cv2.findContours(j1,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
+    contours1, hierarchy1 = cv2.findContours(j1,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)#find contours of 2 biggest blobs
     contours2, hierarchy2 = cv2.findContours(j2,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
 
     j1 = (j1>1)
@@ -1067,9 +1068,12 @@ def IslandSplittingContour(image):
     t1 = t1.T
     t2 = t2.T
 
-    innerTrial1 =np.zeros(shape = (t1.shape[0],1,))
-    for k in range(0,t1.shape[0]):
-        innerTrial1[k] = t1[k]*t1[k].T
+    # this is code to associate the smaller blobs with the two biggest blobs, based on distance to the contour
+    # we take one representative pixel at random from each of the small blobs for this
+
+    innerTrial1 =np.zeros(shape = (t1.shape[0],1,))#below is matrix manipulations to calculate distance
+    for k in range(0,t1.shape[0]):               #  the key idea is that dist(x,y)^2 = x'x - 2x'y + y'y where ' means transpose 
+        innerTrial1[k] = t1[k]*t1[k].T           #  we are dealing with vectors because each pixel is in 2-dimensional space
          
     innerTrial2 = np.zeros(shape = (t2.shape[0],1,))
     for k in range(0,t2.shape[0]):
@@ -1087,13 +1091,13 @@ def IslandSplittingContour(image):
                 temp2 = innerTrial2 - 2 * t2 * t
                 temp1 =np.amin(temp1)
                 temp2 =np.amin(temp2)
-                if temp1 < temp2:
+                if temp1 < temp2:#here we find which contour each unlabeled blob is closer too and associate the blob with that specific bunch
                     labelled_array[labelled_array==p]=idx[0]
                 else:
                     labelled_array[labelled_array==p]=idx[1]
 
     if k>0:
-        g = np.matrix(data)
+        g = np.matrix(data)# Now we repeat the same process for pixels that were initially zeroed out because of the thresholding  
         temp = (labelled_array<1)
         temp = temp.astype(int)
         dent = np.multiply(g,temp)
@@ -1117,8 +1121,8 @@ def IslandSplittingContour(image):
                 labelled_array[labelled_array2==p]=idx[1]
 
    
- 
-    Nx=image.shape[1]
+    # calculate the final output arrays
+    Nx=image.shape[1]#here we split the orginal image into 2 bunches 
     Ny=image.shape[0]
     outimages=np.zeros((2,Ny,Nx))
     temp = (labelled_array == idx[0])

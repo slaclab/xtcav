@@ -11,46 +11,45 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
-Changes since last tagged version:
+Tag: V00-00-11
+2015-08-18 Mihir Mongia
+Added parameters controllable by the user to the 'contourLabel' island splitting method
 
+2015-08-11 Alvaro Sanchez-Gonzalez
 -Modified how the islandSplitMethod is set for the shot to shot characterization, so the user can override the version set for the lasing off references.
 -Added method ProcessedXTCAVImageROI returning the position of the ProcessedXTAV image after cropping within the full CCD.
 -Parallelization of the lasing off generation process. The countour method for the island splitting method for the island splitting seems to improve things, but much computationally slower, so now we need parallel processing even for this. This has been done by Charles Olivier and Paul Micaelli.
 -Added docstring to IslandSplittingContour
 
-Tag: V00-00-11
-2014-07-06 Mihir Mongia
-Add contour split method to split multiple bunches
-
 Tag: V00-00-10
-2014-06-17 Christopher O'Grady
+2015-06-17 Christopher O'Grady
 - A fix from Alvaro for the calculation of a phase.
 
 Tag: V00-00-09
-2014-05-29 Christopher O'Grady
+2015-05-29 Christopher O'Grady
 - Missed one of the calls to CalibrationPaths.
 
 Tag: V00-00-08
-2014-05-28 Christopher O'Grady
+2015-05-28 Christopher O'Grady
 - Fix GenerateDarkBackground.py and GenerateLasingOffReference.py
   to pass env() instead of datasource to CalibrationPaths()
 
 Tag: V00-00-07
-2014-02-27 Christopher O'Grady
+2015-02-27 Christopher O'Grady
 - Add interface ShotToShotCharacterization::SetEnv, which
   can be used like SetDataSource, but is usable from modules
 
 Tag: V00-00-06
-2014-02-26 Christopher O'Grady
+2015-02-26 Christopher O'Grady
 - Support ebeamv7
 
 Tag: V00-00-05
-2014-02-23 Christopher O'Grady
+2015-02-23 Christopher O'Grady
 - From Alvaro: Solved bug making the inter bunch delay function fail
   for vectors with an odd number of elements
 
 Tag: V00-00-04
-2014-02-20 Christopher O'Grady
+2015-02-20 Christopher O'Grady
 - The latest changes from Alvaro:
 - Island separation improved to better discard islands coming from noise, 
   and make it more robust in the determination of number of bunches.

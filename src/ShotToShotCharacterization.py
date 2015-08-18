@@ -1,7 +1,6 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 
 #Script for the retrieval of the pulses shot to shot
-
 import os
 import time
 import psana
@@ -29,7 +28,7 @@ class ShotToShotCharacterization(object):
         snrfilter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
-        islandSplitMethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
+        islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
     """
 
     def __init__(self):
@@ -49,7 +48,7 @@ class ShotToShotCharacterization(object):
         self._snrfilter=float('nan')             #Number of sigmas for the noise threshold
         self._roiwaistthres=float('nan')         #Parameter for the roi location
         self._roiexpand=float('nan')             #Parameter for the roi location
-        self._islandSplitMethod=''               #Method for island splitting
+        self._islandsplitmethod=''               #Method for island splitting
         self._currentevent=[]
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
@@ -133,8 +132,8 @@ class ShotToShotCharacterization(object):
             self._roiexpand=self._lasingoffreference.parameters['roiexpand']
         if not self._darkreferencepath:
             self._darkreferencepath=self._lasingoffreference.parameters['darkreferencepath']
-        if not self._islandSplitMethod:
-            self._islandSplitMethod=self._lasingoffreference.parameters.get('islandSplitMethod','scipylabel')
+        if not self._islandsplitmethod:
+            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod','scipylabel')
             
         return True
             
@@ -152,8 +151,8 @@ class ShotToShotCharacterization(object):
             self._roiwaistthres=0.2
         if math.isnan(self._roiexpand):
             self._roiexpand=2.5    
-        if not self._islandSplitMethod:
-            self._islandSplitMethod='scipylabel'
+        if not self._islandsplitmethod:
+            self._islandsplitmethod='scipylabel'
                            
     def SetCurrentEvent(self,evt):
         """
@@ -257,15 +256,14 @@ class ShotToShotCharacterization(object):
             return False
 
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if self._loadedlasingoffreference == True:
-            if 'islandSplitMethod' in self._lasingoffreference.parameters:
-                img=xtu.SplitImage(img,self._nb, self._islandSplitMethod)
-            else:
-                img=xtu.SplitImage(img,self._nb,'scipyLabel')
-        else:
-            img=xtu.SplitImage(img,self._nb,'scipyLabel')
-            
         
+        if self._loadedlasingoffreference == True:
+            if 'islandsplitmethod' in self._lasingoffreference.parameters:
+                img=xtu.SplitImage(img,self._nb, self._lasingoffreference.parameters['islandsplitmethod'],self._lasingoffreference.parameters['ratio1'],self._lasingoffreference.parameters['ratio2'])
+            else:
+                img=xtu.SplitImage(img,self._nb,'scipyLabel',0,0)
+        else:
+            img=xtu.SplitImage(img,self._nb,'scipyLabel',0,0)
 
         imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
         
@@ -710,9 +708,20 @@ class ShotToShotCharacterization(object):
     def calibrationpath(self, calpath):
         self._calpath = calpath       
     @property
-    def islandSplitMethod(self):
-        return self._islandSplitMethod
-    @islandSplitMethod.setter
-    def islandSplitMethod(self, islandSplitMethod):
-        self._islandSplitMethod = islandSplitMethod 
-        
+    def islandsplitmethod(self):
+        return self._islandsplitmethod
+    @islandsplitmethod.setter
+    def islandsplitmethod(self, islandsplitmethod):
+        self._islandsplitmethod = islandsplitmethod 
+    @property
+    def ratio1(self):
+        return self._ratio1
+    @ratio1.setter
+    def ratio1(self, ratio1):
+        self._ratio1 = ratio1 
+    @property
+    def ratio2(self):
+        return self._ratio2
+    @ratio2.setter
+    def ratio2(self, ratio2):
+        self._ratio2 = ratio2
