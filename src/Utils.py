@@ -1072,12 +1072,18 @@ def IslandSplittingContour(image,ratio1,ratio2):
     # we take one representative pixel at random from each of the small blobs for this
 
     innerTrial1 =np.zeros(shape = (t1.shape[0],1,))#below is matrix manipulations to calculate distance
-    for k in range(0,t1.shape[0]):               #  the key idea is that dist(x,y)^2 = x'x - 2x'y + y'y where ' means transpose 
-        innerTrial1[k] = t1[k]*t1[k].T           #  we are dealing with vectors because each pixel is in 2-dimensional space
+
+    #  the key idea is that dist(x,y)^2 = x'x - 2x'y + y'y where ' means transpose 
+    #  (x is the location of the random pixel in the unassigned blob and y
+    #  is the location of any pixel in the big-blob contour)
+    #  x'x (the coordinate of the random pixel in the small blob) is constant and is ignored in this computation
+    #  so we only need to compute 2x'y and y'y
+    for k in range(0,t1.shape[0]):
+        innerTrial1[k] = t1[k]*t1[k].T # y'y for blob1
          
     innerTrial2 = np.zeros(shape = (t2.shape[0],1,))
     for k in range(0,t2.shape[0]):
-        innerTrial2[k] = t2[k]*t2[k].T
+        innerTrial2[k] = t2[k]*t2[k].T # y'y for blob2
 
     for p in range(1,num_features):
         if p!=idx[0]:
@@ -1087,10 +1093,10 @@ def IslandSplittingContour(image,ratio1,ratio2):
                 t= np.matrix(t)
                 t = t.T
                 
-                temp1 = innerTrial1 - 2 * t1 * t
-                temp2 = innerTrial2 - 2 * t2 * t
-                temp1 =np.amin(temp1)
-                temp2 =np.amin(temp2)
+                temp1 = innerTrial1 - 2 * t1 * t # y'y - 2x'y for blob1
+                temp2 = innerTrial2 - 2 * t2 * t # y'y - 2x'y for blob2
+                temp1 =np.amin(temp1) # compute the minimum distance between large blob1 and small blob
+                temp2 =np.amin(temp2) # compute the minimum distance between large blob2 and small blob
                 if temp1 < temp2:#here we find which contour each unlabeled blob is closer too and associate the blob with that specific bunch
                     labelled_array[labelled_array==p]=idx[0]
                 else:
