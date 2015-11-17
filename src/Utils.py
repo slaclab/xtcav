@@ -613,6 +613,22 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
            
     return physicalUnits,ok
 
+
+def GetGlobalCalibValue(epicsStore,names):
+    """
+    Iterate through list of names to try to get calibration value
+    Arguments:
+      names: list of string-names
+    Output:
+      value of epics variable and flag: 1 if found, 0 if not found.
+      if not found a default value of 0 is returned for the epics variable.
+    """
+    for n in names:
+        val = epicsStore.value(n)
+        if val is not None: return val,1
+    warnings.warn_explicit('No XTCAV Calibration for epics variable'+name[0],UserWarning,'XTCAV',0)
+    return 0,0
+
 def GetGlobalXTCAVCalibration(epicsStore):
     """
     Obtain the global XTCAV calibration form the epicsStore
@@ -625,41 +641,13 @@ def GetGlobalXTCAVCalibration(epicsStore):
     
     ok=1
 
-    umperpix=epicsStore.value('XTCAV_calib_umPerPx')
-    strstrength=epicsStore.value('XTCAV_strength_par_S')
-    rfampcalib=epicsStore.value('XTCAV_Amp_Des_calib_MV')
-    rfphasecalib=epicsStore.value('XTCAV_Phas_Des_calib_deg')
-    dumpe=epicsStore.value('XTCAV_Beam_energy_dump_GeV')
-    dumpdisp=epicsStore.value('XTCAV_calib_disp_posToEnergy')
+    umperpix,ok=GetGlobalCalibValue(epicsStore,['XTCAV_calib_umPerPx','OTRS:DMP1:695:RESOLUTION'])
+    strstrength,ok=GetGlobalCalibValue(epicsStore,['XTCAV_strength_par_S','Streak_Strength','OTRS:DMP1:695:TCAL_X'])
+    rfampcalib,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Amp_Des_calib_MV','XTCAV_Cal_Amp','SIOC:SYS0:ML01:AO214'])
+    rfphasecalib,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Phas_Des_calib_deg','XTCAV_Cal_Phase','SIOC:SYS0:ML01:AO215'])
+    dumpe,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Beam_energy_dump_GeV','Dump_Energy','REFS:DMP1:400:EDES'])
+    dumpdisp,ok=GetGlobalCalibValue(epicsStore,['XTCAV_calib_disp_posToEnergy','Dump_Disp','SIOC:SYS0:ML01:AO216'])
 
-
-    if strstrength==None:                #Try old values          
-        umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
-        strstrength=epicsStore.value('Streak_Strength')
-        rfampcalib=epicsStore.value('XTCAV_Cal_Amp')
-        rfphasecalib=epicsStore.value('XTCAV_Cal_Phase')
-        dumpe=epicsStore.value('Dump_Energy')
-        dumpdisp=epicsStore.value('Dump_Disp')
-        
-    #Try old values     
-    if strstrength==None:                #Try old values    
-        umperpix=epicsStore.value('OTRS:DMP1:695:RESOLUTION')
-        strstrength=epicsStore.value('OTRS:DMP1:695:TCAL_X')
-        rfampcalib=epicsStore.value('SIOC:SYS0:ML01:AO214')
-        rfphasecalib=epicsStore.value('SIOC:SYS0:ML01:AO215')
-        dumpe=epicsStore.value('REFS:DMP1:400:EDES')
-        dumpdisp=epicsStore.value('SIOC:SYS0:ML01:AO216')
-    
-    if strstrength==None:                #Some hardcoded values
-        warnings.warn_explicit('No XTCAV Calibration',UserWarning,'XTCAV',0)
-        ok=0
-        umperpix=0#35.09
-        strstrength=0#75.7755218282
-        rfampcalib=0#30.0
-        rfphasecalib=0#91.5137179027
-        dumpe=0#3.351
-        dumpdisp=0#0.562354882477
-             
     globalCalibration={
         'umperpix':umperpix, #Pixel size of the XTCAV camera
         'strstrength':strstrength,  #Strength parameter

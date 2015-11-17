@@ -11,6 +11,13 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-12
+2015-08-18 Christopher O'Grady
+Change the GetGlobalXTCAVCalibration method to try all possible
+names for each variable, since the previous method of using the
+"strstrength" variable to decide how to read all the variables
+didn't work for cxii0314 run 101.
+
 Tag: V00-00-11
 2015-08-18 Mihir Mongia
 Added parameters controllable by the user to the 'contourLabel' island splitting method
