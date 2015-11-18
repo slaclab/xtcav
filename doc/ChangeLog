@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-13
+2015-08-18 Christopher O'Grady
+Fix bug in setting "ok" value in GetGlobalXTCAVCalibration.
+
 Tag: V00-00-12
 2015-08-18 Christopher O'Grady
 Change the GetGlobalXTCAVCalibration method to try all possible

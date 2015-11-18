@@ -614,7 +614,7 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
     return physicalUnits,ok
 
 
-def GetGlobalCalibValue(epicsStore,names):
+def GetGlobalCalibValue(epicsStore,names,ok):
     """
     Iterate through list of names to try to get calibration value
     Arguments:
@@ -625,9 +625,10 @@ def GetGlobalCalibValue(epicsStore,names):
     """
     for n in names:
         val = epicsStore.value(n)
-        if val is not None: return val,1
+        if val is not None: return val
     warnings.warn_explicit('No XTCAV Calibration for epics variable'+name[0],UserWarning,'XTCAV',0)
-    return 0,0
+    ok[0]=0 # notify caller that no value was found for a variable
+    return 0
 
 def GetGlobalXTCAVCalibration(epicsStore):
     """
@@ -639,14 +640,14 @@ def GetGlobalXTCAVCalibration(epicsStore):
       ok: if all the data was retrieved correctly
     """
     
-    ok=1
 
-    umperpix,ok=GetGlobalCalibValue(epicsStore,['XTCAV_calib_umPerPx','OTRS:DMP1:695:RESOLUTION'])
-    strstrength,ok=GetGlobalCalibValue(epicsStore,['XTCAV_strength_par_S','Streak_Strength','OTRS:DMP1:695:TCAL_X'])
-    rfampcalib,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Amp_Des_calib_MV','XTCAV_Cal_Amp','SIOC:SYS0:ML01:AO214'])
-    rfphasecalib,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Phas_Des_calib_deg','XTCAV_Cal_Phase','SIOC:SYS0:ML01:AO215'])
-    dumpe,ok=GetGlobalCalibValue(epicsStore,['XTCAV_Beam_energy_dump_GeV','Dump_Energy','REFS:DMP1:400:EDES'])
-    dumpdisp,ok=GetGlobalCalibValue(epicsStore,['XTCAV_calib_disp_posToEnergy','Dump_Disp','SIOC:SYS0:ML01:AO216'])
+    ok = [1]
+    umperpix=GetGlobalCalibValue(epicsStore,['XTCAV_calib_umPerPx','OTRS:DMP1:695:RESOLUTION'],ok)
+    strstrength=GetGlobalCalibValue(epicsStore,['XTCAV_strength_par_S','Streak_Strength','OTRS:DMP1:695:TCAL_X'],ok)
+    rfampcalib=GetGlobalCalibValue(epicsStore,['XTCAV_Amp_Des_calib_MV','XTCAV_Cal_Amp','SIOC:SYS0:ML01:AO214'],ok)
+    rfphasecalib=GetGlobalCalibValue(epicsStore,['XTCAV_Phas_Des_calib_deg','XTCAV_Cal_Phase','SIOC:SYS0:ML01:AO215'],ok)
+    dumpe=GetGlobalCalibValue(epicsStore,['XTCAV_Beam_energy_dump_GeV','Dump_Energy','REFS:DMP1:400:EDES'],ok)
+    dumpdisp=GetGlobalCalibValue(epicsStore,['XTCAV_calib_disp_posToEnergy','Dump_Disp','SIOC:SYS0:ML01:AO216'],ok)
 
     globalCalibration={
         'umperpix':umperpix, #Pixel size of the XTCAV camera
@@ -658,7 +659,7 @@ def GetGlobalXTCAVCalibration(epicsStore):
         }
                 
                 
-    return globalCalibration,ok
+    return globalCalibration,ok[0]
           
     
 def GetXTCAVImageROI(epicsStore):
