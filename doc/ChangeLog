@@ -11,6 +11,12 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+-Add method InterBunchPulseDelayBasedOnCurrentMultiple
+-Added docstring to IslandSplittingContour
+-Changed names of the parameters for the island split method: par1 and par2 to islandsplitpar1, islandsplitpar2, so at least the name states that they refer to the island splitting process (even if they are used differently by different algorithms at some point).
+
+
+
 Tag: V00-00-13
 2015-08-18 Christopher O'Grady
 Fix bug in setting "ok" value in GetGlobalXTCAVCalibration.
@@ -30,8 +36,13 @@ Added parameters controllable by the user to the 'contourLabel' island splitting
 -Modified how the islandSplitMethod is set for the shot to shot characterization, so the user can override the version set for the lasing off references.
 -Added method ProcessedXTCAVImageROI returning the position of the ProcessedXTAV image after cropping within the full CCD.
 -Parallelization of the lasing off generation process. The countour method for the island splitting method for the island splitting seems to improve things, but much computationally slower, so now we need parallel processing even for this. This has been done by Charles Olivier and Paul Micaelli.
--Added docstring to IslandSplittingContour
 
+
+Tag: V00-00-11
+2014-07-06 Mihir Mongia
+Add contour split method to split multiple bunches
+
+Tag: V00-00-10
 Tag: V00-00-10
 2015-06-17 Christopher O'Grady
 - A fix from Alvaro for the calculation of a phase.

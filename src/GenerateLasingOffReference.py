@@ -60,8 +60,8 @@ class GenerateLasingOffReference(object):
         self._roiwaistthres=0.2                 #Parameter for the roi location
         self._roiexpand=2.5                     #Parameter for the roi location
         self._islandsplitmethod = 'scipyLabel'  #Method for island splitting
-        self._ratio1 = 3.0                      #Ratio between number of pixels between largest and second largest groups when calling scipy.label
-        self._ratio2 = 5.0                      #Ratio between number of pixels between second/third largest groups when calling scipy.label
+        self._islandsplitpar1 = 3.0                      #Ratio between number of pixels between largest and second largest groups when calling scipy.label
+        self._islandsplitpar2 = 5.0                      #Ratio between number of pixels between second/third largest groups when calling scipy.label
         self._calpath=''
         
     def Generate(self):
@@ -186,7 +186,7 @@ class GenerateLasingOffReference(object):
                     if not ok:                                        #If there is nothing in the image we skip the event  
                         continue
                     img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-                    img = xtu.SplitImage(img,self._nb,self._islandsplitmethod,self._ratio1,self._ratio2)#new
+                    img = xtu.SplitImage(img,self._nb,self._islandsplitmethod,self._islandsplitpar1,self._islandsplitpar2)#new
 
                     if self._nb!=img.shape[0]:
                         continue
@@ -269,8 +269,8 @@ class GenerateLasingOffReference(object):
             'roiwaistthres':self._roiwaistthres,
             'roiexpand':self._roiexpand,
             'islandsplitmethod':self._islandsplitmethod,
-            'ratio1':self._ratio1,
-            'ratio2':self._ratio2,
+            'islandsplitpar1':self._islandsplitpar1,
+            'islandsplitpar2':self._islandsplitpar2,
         }
         
         
@@ -364,15 +364,15 @@ class GenerateLasingOffReference(object):
     def islandsplitmethod(self, islandsplitmethod):
         self._islandsplitmethod = islandsplitmethod 
     @property
-    def ratio1(self):
-        return self._ratio1
-    @ratio1.setter
-    def ratio1(self, ratio1):
-        self._ratio1 = ratio1 
+    def islandsplitpar1(self):
+        return self._islandsplitpar1
+    @islandsplitpar1.setter
+    def islandsplitpar1(self, islandsplitpar1):
+        self._islandsplitpar1 = islandsplitpar1 
     @property
-    def ratio2(self):
-        return self._ratio2
-    @ratio2.setter
-    def ratio2(self, ratio2):
-        self._ratio2 = ratio2
+    def islandsplitpar2(self):
+        return self._islandsplitpar2
+    @islandsplitpar2.setter
+    def islandsplitpar2(self, islandsplitpar2):
+        self._islandsplitpar2 = islandsplitpar2
 

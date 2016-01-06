@@ -49,6 +49,8 @@ class ShotToShotCharacterization(object):
         self._roiwaistthres=float('nan')         #Parameter for the roi location
         self._roiexpand=float('nan')             #Parameter for the roi location
         self._islandsplitmethod=''               #Method for island splitting
+        self._islandsplitpar1=float('nan')
+        self._islandsplitpar2=float('nan')
         self._currentevent=[]
         self._eventresultsstep1=[]
         self._eventresultsstep2=[]
@@ -133,7 +135,11 @@ class ShotToShotCharacterization(object):
         if not self._darkreferencepath:
             self._darkreferencepath=self._lasingoffreference.parameters['darkreferencepath']
         if not self._islandsplitmethod:
-            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod','scipylabel')
+            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod','scipylabel')            
+        if math.isnan(self._islandsplitpar1):        
+            self._islandsplitpar1=self._lasingoffreference.parameters.get('islandsplitpar1',3.)          
+        if math.isnan(self._islandsplitpar2):        
+            self._islandsplitpar2=self._lasingoffreference.parameters.get('islandsplitpar2',5.)   
             
         return True
             
@@ -152,7 +158,11 @@ class ShotToShotCharacterization(object):
         if math.isnan(self._roiexpand):
             self._roiexpand=2.5    
         if not self._islandsplitmethod:
-            self._islandsplitmethod='scipylabel'
+            self._islandsplitmethod='scipylabel'       
+        if math.isnan(self._islandsplitpar1):        
+            self._islandsplitpar1=3.0
+        if math.isnan(self._islandsplitpar2):        
+            self._islandsplitpar2=5.0
                            
     def SetCurrentEvent(self,evt):
         """
@@ -256,14 +266,10 @@ class ShotToShotCharacterization(object):
             return False
 
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        img=xtu.SplitImage(img,self._nb, self._islandSplitMethod,self._islandsplitpar1,self._islandsplitpar2)
+
+         
         
-        if self._loadedlasingoffreference == True:
-            if 'islandsplitmethod' in self._lasingoffreference.parameters:
-                img=xtu.SplitImage(img,self._nb, self._lasingoffreference.parameters['islandsplitmethod'],self._lasingoffreference.parameters['ratio1'],self._lasingoffreference.parameters['ratio2'])
-            else:
-                img=xtu.SplitImage(img,self._nb,'scipyLabel',0,0)
-        else:
-            img=xtu.SplitImage(img,self._nb,'scipyLabel',0,0)
 
         imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
         
@@ -376,12 +382,86 @@ class ShotToShotCharacterization(object):
             
         return self._eventresultsstep3 ,True        
             
-    def InterBunchPulseDelayBasedOnCurrent(self):    
+    def PulseDelay(self,method='RMSCOM'):    
         """
-        Method which returns the time delay between the x-rays generated from different bunches based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval They are referred to the center of masses of the total current. The order of the delays goes from higher to lower energy electron bunches.
-
+        Method which returns the time of lasing for each bunch based on the x-ray reconstruction. They delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches.
+        Args:
+            method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
             out1: List of the delays for each bunch.
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return [],False
+            
+        if (self._eventresultsstep1['NB']<1):
+            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        
+                  
+        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
+        for j in range(0,self._eventresultsstep1['NB']):
+            t=self._eventresultsstep3['t']+self._eventresultsstep3['bunchdelay'][j]
+            if method=='RMS':
+                power=self._eventresultsstep3['powerERMS'][j]
+            elif method=='COM':
+                power=self._eventresultsstep3['powerECOM'][j]
+            elif method=='RMSCOM':
+                power=(self._eventresultsstep3['powerECOM'][j]+self._eventresultsstep3['powerERMS'][j])/2
+            else:
+                return [],False        
+            #quadratic fit around 5 pixels method
+            central=np.argmax(power)
+            try:
+                fit=np.polyfit(t[central-2:central+3],power[central-2:central+3],2)
+                peakpos[j]=-fit[1]/(2*fit[0])
+            except:
+                return [],False  
+            
+        return peakpos,True
+            
+    def PulseFWHM(self,method='RMSCOM'):    
+        """
+        Method which returns the FWHM of the pulse generated by each bunch in fs. It uses the power profile. The order of the widths goes from higher to lower energy electron bunches.
+        Args:
+            method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
+        Returns: 
+            out1: List of the full widths half maximum for each bunch.
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+        if not self._currenteventprocessedstep3:
+            if not self.ProcessShotStep3():
+                return [],False
+            
+        if (self._eventresultsstep1['NB']<1):
+            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        
+                  
+        peakwidth=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
+        for j in range(0,self._eventresultsstep1['NB']):
+            t=self._eventresultsstep3['t']+self._eventresultsstep3['bunchdelay'][j]
+            if method=='RMS':
+                power=self._eventresultsstep3['powerERMS'][j]
+            elif method=='COM':
+                power=self._eventresultsstep3['powerECOM'][j]
+            elif method=='RMSCOM':
+                power=(self._eventresultsstep3['powerECOM'][j]+self._eventresultsstep3['powerERMS'][j])/2
+            else:
+                return [],False        
+            #quadratic fit around 5 pixels method
+            threshold=np.max(power)/2
+            abovethrestimes=t[power>=threshold]
+            dt=t[1]-t[0]
+            peakwidth[j]=abovethrestimes[-1]-abovethrestimes[0]+dt
+            
+        return peakwidth,True
+      
+    def InterBunchPulseDelayBasedOnCurrent(self):    
+        """
+        Method which returns the time of lasing for each bunch based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval. The delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches.
+
+        Returns: 
+            out1: List with the delay for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
         if not self._currenteventprocessedstep2:
@@ -412,14 +492,59 @@ class ShotToShotCharacterization(object):
             
         return peakpos,True
         
+    def InterBunchPulseDelayBasedOnCurrentMultiple(self,n=1,filterwith=7):    
+        """
+        Method which returns multiple possible times of lasing for each bunch based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval. The delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches. Then within each bunch the "n" delays are orderer from highest peak current yo lowest peak current.
+        Args:
+            n (int): number of possible times of lasing (peaks in the electron current) to find per bunch
+            filterwith (float): Witdh of the peak that is removed before searching for the next peak in the same bunch
+        Returns: 
+            out1: List with a list of "n" delays for each bunch.
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+        if not self._currenteventprocessedstep2:
+            if not self.ProcessShotStep2():
+                return [],False
+            
+        if (self._eventresultsstep1['NB']<1):
+            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        
+        t=self._eventresultsstep2['PU']['xfs']   
+          
+        peakpos=np.zeros((self._eventresultsstep1['NB'],n), dtype=np.float64);
+           
+        for j in range(0,self._eventresultsstep1['NB']):
+            profile=self._eventresultsstep1['imageStats'][j]['xProfile'].copy()
+            for k in range(n):
+                #highest value method
+                #peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
+                
+                #five highest values method
+                #ind=np.mean(np.argpartition(-self._eventresultsstep2['imageStats'][j]['xProfile'],5)[0:5]) #Find the position of the 5 highest values
+                #peakpos[j]=t[ind]
+                
+                #quadratic fit around 5 pixels method
+                central=np.argmax(profile)
+                try:
+                    fit=np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
+                    peakpos[j,k]=-fit[1]/(2*fit[0])
+                    filter=1-np.exp(-(t-peakpos[j,k])**2/(filterwith/(2*np.sqrt(np.log(2))))**2)
+                    profile=profile*filter                   
+                except:
+                    peakpos[j,k]=np.nan
+                    if k==0:
+                        return [],False
+                
+        return peakpos,True
+        
     def InterBunchPulseDelayBasedOnCurrentFourierFiltered(self,targetwidthfs=20,thresholdfactor=0):    
         """
-        Method which returns the time delay between the x-rays generated from different bunches based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval They are referred to the center of masses of the total current. The order of the delays goes from higher to lower energy electron bunches. This method includes a Fourier filter that applies a low pass filter to amplify the feature identified as the lasing part of the bunch, and ignore other peaks that may be higher in amplitude but also higher in width. It is possible to threshold the signal before calculating the Fourier transform to automatically discard peaks that may be sharp, but too low in amplitude to be the right peaks.
+        Method which returns the time delay between the x-rays generated from different bunches based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval. The delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches. This method includes a Fourier filter that applies a low pass filter to amplify the feature identified as the lasing part of the bunch, and ignore other peaks that may be higher in amplitude but also higher in width. It is possible to threshold the signal before calculating the Fourier transform to automatically discard peaks that may be sharp, but too low in amplitude to be the right peaks.
         Args:
             targetwidthfs (float): Witdh of the peak to be used for calculating delay
             thresholdfactor (float): Value between 0 and 1 that indicates which threshold factor to apply to filter the signal before calculating the fourier transform
         Returns: 
-            out1: List of the delays for each bunch.
+            out1: List with the delay for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
         if not self._currenteventprocessedstep2:
@@ -498,10 +623,12 @@ class ShotToShotCharacterization(object):
                     
         return tout,currents,True
         
-    def XRayPower(self):       
+    def XRayPower(self,method='RMSCOM'):       
         """
         Method which returns the power profile for the X-Rays generated by each electron bunch. This is the averaged result from the RMS method and the COM method.
 
+        Args:
+            method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
             out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
             out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
@@ -521,7 +648,16 @@ class ShotToShotCharacterization(object):
         for j in range(0,self._nb):
             t[j,:]=mastert+self._eventresultsstep3['bunchdelay'][j]
 
-        return t,(self._eventresultsstep3['powerERMS']+self._eventresultsstep3['powerECOM'])/2,True         
+        if method=='RMS':
+            power=self._eventresultsstep3['powerERMS']
+        elif method=='COM':
+            power=self._eventresultsstep3['powerECOM']
+        elif method=='RMSCOM':
+            power=(self._eventresultsstep3['powerECOM']+self._eventresultsstep3['powerERMS'])/2
+        else:
+            return [],False  
+            
+        return t,power,True         
         
     def XRayPowerRMSBased(self):   
         """
@@ -532,21 +668,8 @@ class ShotToShotCharacterization(object):
             out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
             out3: True if the retrieval was successful, False otherwise. 
         """
-        t=[]
-        power=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return t,power,False
         
-                        
-        mastert=self._eventresultsstep3['t']
-        t=np.zeros((self._nb,len(mastert)), dtype=np.float64);
-        for j in range(0,self._nb):
-            t[j,:]=mastert+self._eventresultsstep3['bunchdelay'][j]
-
-        return t,self._eventresultsstep3['powerERMS'],True   
-        
+        return self.XRayPower(method='RMS') 
 
     def XRayPowerCOMBased(self):   
         """
@@ -557,25 +680,13 @@ class ShotToShotCharacterization(object):
             out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
             out3: True if the retrieval was successful, False otherwise.
         """
-        t=[]
-        power=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return t,power,False
+        return self.XRayPower(method='COM') 
         
-                        
-        mastert=self._eventresultsstep3['t']
-        t=np.zeros((self._nb,len(mastert)), dtype=np.float64);
-        for j in range(0,self._nb):
-            t[j,:]=mastert+self._eventresultsstep3['bunchdelay'][j]
-
-        return t,self._eventresultsstep3['powerECOM'],True  
-        
-    def XRayEnergyPerBunch(self):   
+    def XRayEnergyPerBunch(self,method='RMSCOM'):   
         """
         Method which returns the total X-Ray energy generated per bunch. This is the averaged result from the RMS method and the COM method.
-
+        Args:
+            method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
             out1: List with the values of the energy for each bunch in J
             out2: True if the retrieval was successful, False otherwise.
@@ -585,8 +696,18 @@ class ShotToShotCharacterization(object):
         if not self._currenteventprocessedstep3:
             if not self.ProcessShotStep3():
                 return energies,False
+        
+        
+        if method=='RMS':
+            energyperbunch=self._eventresultsstep3['lasingenergyperbunchERMS']
+        elif method=='COM':
+            energyperbunch=self._eventresultsstep3['lasingenergyperbunchECOM']
+        elif method=='RMSCOM':
+            energyperbunch=(self._eventresultsstep3['lasingenergyperbunchECOM']+self._eventresultsstep3['lasingenergyperbunchERMS'])/2
+        else:
+            return energies,False
        
-        return (self._eventresultsstep3['lasingenergyperbunchECOM']+self._eventresultsstep3['lasingenergyperbunchERMS'])/2,True  
+        return energyperbunch,True  
         
     def XRayEnergyPerBunchCOMBased(self):   
         """
@@ -595,14 +716,8 @@ class ShotToShotCharacterization(object):
         Returns: 
             out1: List with the values of the energy for each bunch in J
             out2: True if the retrieval was successful, False otherwise.
-        """
-        energies=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return energies,False
-       
-        return self._eventresultsstep3['lasingenergyperbunchECOM'],True  
+        """       
+        return self.XRayEnergyPerBunch(method='COM')
     
     def XRayEnergyPerBunchRMSBased(self):   
         """
@@ -612,13 +727,7 @@ class ShotToShotCharacterization(object):
             out1: List with the values of the energy for each bunch in J
             out2: True if the retrieval was successful, False otherwise.
         """
-        energies=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return energies,False
-       
-        return self._eventresultsstep3['lasingenergyperbunchERMS'],True          
+        return self.XRayEnergyPerBunch(method='RMS')      
         
         
         
@@ -678,6 +787,13 @@ class ShotToShotCharacterization(object):
         return np.mean(self._eventresultsstep3['powerAgreement'])  ,True      
         
     @property
+    def nb(self):
+        return self._nb
+    @nb.setter
+    def nb(self, nb):
+        if not self._loadedlasingoffreference:
+            self._nb = nb
+    @property
     def medianfilter(self):
         return self._medianfilter
     @medianfilter.setter
@@ -714,14 +830,14 @@ class ShotToShotCharacterization(object):
     def islandsplitmethod(self, islandsplitmethod):
         self._islandsplitmethod = islandsplitmethod 
     @property
-    def ratio1(self):
-        return self._ratio1
-    @ratio1.setter
-    def ratio1(self, ratio1):
-        self._ratio1 = ratio1 
+    def islandsplitpar1(self):
+        return self._islandsplitpar1
+    @islandsplitpar1.setter
+    def islandsplitpar1(self, islandsplitpar1):
+        self._islandsplitpar1 = islandsplitpar1 
     @property
-    def ratio2(self):
-        return self._ratio2
-    @ratio2.setter
-    def ratio2(self, ratio2):
-        self._ratio2 = ratio2
+    def islandsplitpar2(self):
+        return self._islandsplitpar2
+    @islandsplitpar2.setter
+    def islandsplitpar2(self, islandsplitpar2):
+        self._islandsplitpar2 = islandsplitpar2

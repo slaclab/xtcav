@@ -139,20 +139,20 @@ def DenoiseImage(image,medianfilter,snrfilter):
     Arguments:
       image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
       medianfilter: number of neighbours for the median filter
-      SNR_border: number of pixels near the border that can be considered to contain just noise
+      snrfilter: factor to multiply the standard deviation of the noise to use as a threshold
     Output
       image: filtered image
       ok: true if there is something in the image
     """
-    SNR_border=100
+    SNR_border=100 #number of pixels near the border that can be considered to contain just noise
 
     ok=1
     #Applygin the median filter
     image=im.median_filter(image,medianfilter)
     
     #Obtaining the mean and the standard deviation of the noise
-    mean=np.mean(image[:,0:SNR_border]);
-    std=np.std(image[:,0:SNR_border]);
+    mean=np.mean(image[0:SNR_border,0:SNR_border]);
+    std=np.std(image[0:SNR_border,0:SNR_border]);
     
     #Subtracting the mean of the noise
     image=image-mean;
@@ -768,8 +768,7 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
     Output:
       outimage: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
     """
-    
-   
+
     if n==1:    #For one bunch, just the same image
         outimage=np.zeros((n,image.shape[0],image.shape[1]))
         outimage[0,:,:]=image    
@@ -780,6 +779,8 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
         #outimage=OptimalSplittingLine(image[0,:,:])           
         if islandsplitmethod == 'contourLabel':   
             outimage = IslandSplittingContour(image,par1,par2)
+        elif islandSplitMethod == 'autothreshold':   
+            outimage = IslandSplittingAutoThreshold(image,2)
         else:
             outimage = IslandSplitting(image,2)
 
@@ -1000,6 +1001,116 @@ def IslandSplitting(image,N):
     
     return outimages
 
+def IslandSplittingAutoThreshold(image,N):
+    """
+    Find islands in the picture and order them by area, returning the image in N images, ordered by area. Teh total area is one.
+    Arguments:
+      image: 2d numpy array with the image where the first index correspond to y, and thesecond index corresponds to x
+      N: number of islands to return
+    Output:
+      outimages: 3d numpy array with the split image image where the first index is the bunch index, the second index correspond to y, and the third index corresponds to x
+    """
+    
+    Nx=image.shape[1]
+    Ny=image.shape[0]
+    x=range(Nx)
+    y=range(Ny)
+    
+    #Minimum and maximum edge for the threshold to be set
+    thres0=image[image!=0].min()
+    thres1=image[image!=0].max()
+    
+    n_valid=0
+    iternum=0
+    maxiter=25
+    while (iternum<maxiter):
+        #On each iteration we set the threshold to the middle value between the edges 
+        if iternum==maxiter-1:
+            thres=thres1
+        #Except on the last iteration that we set it to the highest one
+        else:
+            thres=(thres0+thres1)/2
+        #print thres
+        imageaux=np.array(image)
+        imageaux[imageaux<thres]=0
+            
+        #Get a bool image with just zeros and ones
+        imgbool=imageaux>0
+        
+        #Calculate the groups
+        groups, n_groups =im.measurements.label(imgbool);
+        
+        #Structure for the areas and the images
+        areas=np.zeros(n_groups,dtype=np.float64)
+        images=[]
+        
+        #Obtain the separated images and the areas
+        for i in range(0,n_groups):    
+            images.append(image*(groups==(i+1)))
+            areas[i]=np.sum(images[i])
+            
+        #Get the indices in descending area order
+        orderareaind=np.argsort(areas)  
+        orderareaind=np.flipud(orderareaind)
+
+        #Check that the area of the second bunch is not smaller than a fraction of the first bunch (otherwise the split probably did not succeed)
+        n_area_valid=1
+        for i in range(1,n_groups): 
+            if areas[orderareaind[i]]<1.0/20*areas[orderareaind[0]]:
+                break
+            else:
+                n_area_valid+=1
+
+        #Number of valid images for the output
+        n_valid=np.amin([N,n_groups,n_area_valid])    
+        
+        #If there are tow few islands we decrease the upper limit, because we thresholded too much
+        if n_valid<N and n_groups<N:
+            thres1=thres
+        #If there are the right number of islands, we decrease the upper limit to see if we could get the same with a smaller threshold
+        if n_valid==N:
+            thres1=thres
+        #In any other case, we have to threshold more
+        else:
+            thres0=thres
+        
+        iternum+=1
+    
+    #Calculate the angle of each large area island with respect to the center of mass
+    x0,y0=GetCenterOfMass(image,x,y)        
+    angles=np.zeros(n_valid,dtype=np.float64)
+    xi=np.zeros(n_valid,dtype=np.float64)
+    yi=np.zeros(n_valid,dtype=np.float64)
+    for i in range(n_valid):
+        xi[i],yi[i]=GetCenterOfMass(images[orderareaind[i]],x,y)
+        angles[i]=math.degrees(np.arctan2(yi[i]-y0,xi[i]-x0))
+                
+    #And we order the output based on angular distribution
+    
+    #If the distance of one of the islands to -180/180 angle is smaller than a certain fraction, we add an angle to make sure that nothing is close to the zero angle
+
+    
+    #Ordering in angles (counterclockwise from 3 oclock)
+    #dist=180-abs(angles)
+    #if np.amin(dist)<30.0/n_valid:
+    #    angles=angles+180.0/n_valid
+    #orderangleind=np.argsort(angles)  
+
+    #Ordering in height (higher energy first)
+    orderangleind=np.argsort(-yi)  
+
+    #Structure for the output
+    outimages=np.zeros((n_valid,Ny,Nx))        
+
+    #Assign the proper images to the output
+    for i in range(n_valid):
+        outimages[i,:,:]=images[orderareaind[orderangleind[i]]]
+        
+    #Renormalize to total area of 1
+    outimages=outimages/np.sum(outimages)
+    
+    return outimages
+    
 def IslandSplittingContour(image,ratio1,ratio2):
     """
     Find islands using the contour method in the picture and order them by area, returning two islands, ordered by area.
