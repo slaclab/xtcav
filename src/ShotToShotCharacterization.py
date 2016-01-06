@@ -266,7 +266,7 @@ class ShotToShotCharacterization(object):
             return False
 
         img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        img=xtu.SplitImage(img,self._nb, self._islandSplitMethod,self._islandsplitpar1,self._islandsplitpar2)
+        img=xtu.SplitImage(img,self._nb, self._islandsplitmethod,self._islandsplitpar1,self._islandsplitpar2)
 
          
         

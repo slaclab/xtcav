@@ -36,7 +36,7 @@ class GenerateDarkBackground(object):
         self._validityrange=[]
         self._calpath=''
                        
-    def Generate(self):
+    def Generate(self,savetofile=True):
         """
         After setting all the parameters, this method has to be called to generate the dark reference and save it in the proper location. It not set, the validity range for the reference will go from the first run number used to generate the reference and the last run.
         """
@@ -107,7 +107,8 @@ class GenerateDarkBackground(object):
         cp=CalibrationPaths(dataSource.env(),self._calpath)
         file=cp.newCalFileName('pedestals',validityrange[0],validityrange[1])
         
-        db.Save(file)
+        if savetofile:
+            db.Save(file)
         
     def SetValidityRange(self,runBegin,runEnd='end'):
         """Sets the validity range for the generated reference.

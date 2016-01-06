@@ -779,7 +779,7 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
         #outimage=OptimalSplittingLine(image[0,:,:])           
         if islandsplitmethod == 'contourLabel':   
             outimage = IslandSplittingContour(image,par1,par2)
-        elif islandSplitMethod == 'autothreshold':   
+        elif islandsplitmethod == 'autothreshold':   
             outimage = IslandSplittingAutoThreshold(image,2)
         else:
             outimage = IslandSplitting(image,2)

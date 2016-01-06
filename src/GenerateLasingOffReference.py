@@ -64,7 +64,7 @@ class GenerateLasingOffReference(object):
         self._islandsplitpar2 = 5.0                      #Ratio between number of pixels between second/third largest groups when calling scipy.label
         self._calpath=''
         
-    def Generate(self):
+    def Generate(self,savetofile=True):
         """
         After setting all the parameters, this method has to be called to generate the lasing off reference and save it in the proper location. It not set, the validity range for the reference will go from the first run number used to generate the reference and the last run.
         """
@@ -282,8 +282,9 @@ class GenerateLasingOffReference(object):
             
         cp=CalibrationPaths(dataSource.env(),self._calpath)
         file=cp.newCalFileName('lasingoffreference',validityrange[0],validityrange[1])
-                
-        lor.Save(file)
+           
+        if savetofile:
+            lor.Save(file)
         
         
     def SetValidityRange(self,runBegin,runEnd='end'):
