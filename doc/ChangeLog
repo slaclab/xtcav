@@ -11,7 +11,7 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
--Added Test.py for running standard tests using python Tests.py on the main three classes. This tests are not exhaustive, as they do not test all possible combinations of paramentes, but at least they allow for a quick check. They require access to experiment 'amo86815'.
+-Added Test.py for running standard tests using python Tests.py on the main three classes. These tests are not exhaustive (they are not sophisticated unit tests of anything like that), as they do not test all possible combinations of paramentes, but at least they allow for a quick check. They require access to experiment 'amo86815'.
 -Add method InterBunchPulseDelayBasedOnCurrentMultiple.
 -Added docstring to IslandSplittingContour.
 -Attribute islandSplitMethod renamed to islandsplitmethod to keep consistency.
