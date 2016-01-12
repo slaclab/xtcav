@@ -120,8 +120,7 @@ class ShotToShotCharacterization(object):
             self._loadedlasingoffreference=False
             return False
         self._lasingoffreference=LasingOffReference.Load(self._lasingoffreferencepath)
-        self._loadedlasingoffreference=True
-                                
+        self._loadedlasingoffreference=True      
         #Only use the parameters if they have not been manually set, except for the number of bunches. That one is mandatory.
         self._nb=self._lasingoffreference.parameters['nb']
         if math.isnan(self._medianfilter):
@@ -135,12 +134,11 @@ class ShotToShotCharacterization(object):
         if not self._darkreferencepath:
             self._darkreferencepath=self._lasingoffreference.parameters['darkreferencepath']
         if not self._islandsplitmethod:
-            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod','scipylabel')            
+            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod',self._lasingoffreference.parameters.get('islandSplitMethod','scipylabel'))#to account for the change name that the variable name suffered at some point, and make it compatible with older lasing off reference files            
         if math.isnan(self._islandsplitpar1):        
-            self._islandsplitpar1=self._lasingoffreference.parameters.get('islandsplitpar1',3.)          
+            self._islandsplitpar1=self._lasingoffreference.parameters.get('islandsplitpar1',self._lasingoffreference.parameters.get('par1',3.))          
         if math.isnan(self._islandsplitpar2):        
-            self._islandsplitpar2=self._lasingoffreference.parameters.get('islandsplitpar2',5.)   
-            
+            self._islandsplitpar2=self._lasingoffreference.parameters.get('islandsplitpar2',self._lasingoffreference.parameters.get('par2',5.))               
         return True
             
     def LoadDefaultProcessingParameters(self):
