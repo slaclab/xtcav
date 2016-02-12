@@ -776,10 +776,11 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
         
         
         #outimage=HorizontalLineSplitting(image[0,:,:]) 
-        #outimage=OptimalSplittingLine(image[0,:,:])           
+        #outimage=OptimalSplittingLine(image[0,:,:])       
+
         if islandsplitmethod == 'contourLabel':   
             outimage = IslandSplittingContour(image,par1,par2)
-        elif islandsplitmethod == 'autothreshold':   
+        elif islandsplitmethod == 'autothreshold':              
             outimage = IslandSplittingAutoThreshold(image,2)
         else:
             outimage = IslandSplitting(image,2)
@@ -944,13 +945,12 @@ def IslandSplitting(image,N):
     
     #Structure for the areas and the images
     areas=np.zeros(n_groups,dtype=np.float64)
-    images=[]
     
-    #Obtain the separated images and the areas
+    
+    #Obtain the areas
     for i in range(0,n_groups):    
-        images.append(image*(groups==(i+1)))
-        areas[i]=np.sum(images[i])
-        
+        areas[i]=np.sum(image*(groups==(i+1)))
+            
     #Get the indices in descending area order
     orderareaind=np.argsort(areas)  
     orderareaind=np.flipud(orderareaind)
@@ -964,7 +964,13 @@ def IslandSplitting(image,N):
             n_area_valid+=1
 
     #Number of valid images for the output
+
     n_valid=np.amin([N,n_groups,n_area_valid])    
+    
+    #Obtain the separated images
+    images=[]  
+    for i in range(0,n_valid):    
+        images.append(image*(groups==(orderareaind[i]+1)))
     
     #Calculate the angle of each large area island with respect to the center of mass
     x0,y0=GetCenterOfMass(image,x,y)        
@@ -972,7 +978,7 @@ def IslandSplitting(image,N):
     xi=np.zeros(n_valid,dtype=np.float64)
     yi=np.zeros(n_valid,dtype=np.float64)
     for i in range(n_valid):
-        xi[i],yi[i]=GetCenterOfMass(images[orderareaind[i]],x,y)
+        xi[i],yi[i]=GetCenterOfMass(images[i],x,y)
         angles[i]=math.degrees(np.arctan2(yi[i]-y0,xi[i]-x0))
                 
     #And we order the output based on angular distribution
@@ -994,7 +1000,7 @@ def IslandSplitting(image,N):
 
     #Assign the proper images to the output
     for i in range(n_valid):
-        outimages[i,:,:]=images[orderareaind[orderangleind[i]]]
+        outimages[i,:,:]=images[orderangleind[i]]
         
     #Renormalize to total area of 1
     outimages=outimages/np.sum(outimages)
@@ -1039,15 +1045,11 @@ def IslandSplittingAutoThreshold(image,N):
         
         #Calculate the groups
         groups, n_groups =im.measurements.label(imgbool);
-        
-        #Structure for the areas and the images
+            
+        #Obtain the areas
         areas=np.zeros(n_groups,dtype=np.float64)
-        images=[]
-        
-        #Obtain the separated images and the areas
         for i in range(0,n_groups):    
-            images.append(image*(groups==(i+1)))
-            areas[i]=np.sum(images[i])
+            areas[i]=np.sum(image*(groups==(i+1)))
             
         #Get the indices in descending area order
         orderareaind=np.argsort(areas)  
@@ -1076,13 +1078,18 @@ def IslandSplittingAutoThreshold(image,N):
         
         iternum+=1
     
+    #Obtain the separated images
+    images=[]  
+    for i in range(0,n_valid):    
+        images.append(image*(groups==(orderareaind[i]+1)))
+    
     #Calculate the angle of each large area island with respect to the center of mass
     x0,y0=GetCenterOfMass(image,x,y)        
     angles=np.zeros(n_valid,dtype=np.float64)
     xi=np.zeros(n_valid,dtype=np.float64)
     yi=np.zeros(n_valid,dtype=np.float64)
     for i in range(n_valid):
-        xi[i],yi[i]=GetCenterOfMass(images[orderareaind[i]],x,y)
+        xi[i],yi[i]=GetCenterOfMass(images[i],x,y)
         angles[i]=math.degrees(np.arctan2(yi[i]-y0,xi[i]-x0))
                 
     #And we order the output based on angular distribution
@@ -1104,7 +1111,7 @@ def IslandSplittingAutoThreshold(image,N):
 
     #Assign the proper images to the output
     for i in range(n_valid):
-        outimages[i,:,:]=images[orderareaind[orderangleind[i]]]
+        outimages[i,:,:]=images[orderangleind[i]]
         
     #Renormalize to total area of 1
     outimages=outimages/np.sum(outimages)

@@ -270,7 +270,6 @@ class ShotToShotCharacterization(object):
         img=xtu.SplitImage(img,self._nb, self._islandsplitmethod,self._islandsplitpar1,self._islandsplitpar2)
 
          
-        
 
         imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
         
@@ -283,8 +282,7 @@ class ShotToShotCharacterization(object):
             'imageStats':imageStats,
             }
         
-        self._currenteventprocessedstep1=True
-                        
+        self._currenteventprocessedstep1=True        
         return True
         
     def ProcessShotStep2(self):
