@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+From Alvaro Sanchez-Gonzalez	
+
+-Greatly improved performance by optimizing some of the calculations performed for the autothreshold and the scipylabel algorithms. This was originally causing some jobs to swap memory too often making them really slow.
+
 Tag: V00-00-14
 2016-02-03 Christopher O'Grady
 Fix crash when image was almost empty, so "physical units" PU['xfs']
