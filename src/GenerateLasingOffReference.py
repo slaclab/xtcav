@@ -124,6 +124,16 @@ class GenerateLasingOffReference(object):
             for t in main[::-1]: #  Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
                 evt=run.event(times[int(t)])
 
+                #ignore shots without xtcav, because we can get
+                #incorrect EPICS information (e.g. ROI).  this is
+                #a workaround for the fact that xtcav only records
+                #epics on shots where it has camera data, as well
+                #as an incorrect design in psana where epics information
+                #is not stored per-shot (it is in a more global object
+                #called "Env")
+                frame = evt.get(xtcav_type, xtcav_camera) 
+                if frame is None: continue
+
                 ebeam = evt.get(psana.Bld.BldDataEBeamV7,ebeam_data)
                 if not ebeam:
                     ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)
@@ -163,9 +173,6 @@ class GenerateLasingOffReference(object):
                     
                 
                               
-                frame = evt.get(xtcav_type, xtcav_camera) 
-
-
                 if frame: #For each shot that contains an xtcav frame we retrieve it        
                     img=frame.data16().astype(np.float64)
 

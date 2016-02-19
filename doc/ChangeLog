@@ -11,6 +11,16 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-16
+2016-02-19 Christopher O'Grady
+Add workaround for problem that returned incorrect epics information
+on shots where XTCAV was not recorded.  This happened because we
+are using indexing-mode, and xtcav is not recording epics data on
+shots where the camera is not recorded, coupled with the incorrect
+idea of a global "Env" where epics information is stored (vs.
+stored "per-shot").  The workaround is to check for an xtcav image
+before trying to access the epics variables when analyzing lasing-off.
+
 Tag: V00-00-15
 2016-02-19 Christopher O'Grady
 Add timestamp of one of the lasing-off shots into the lasing-off constants, so that
