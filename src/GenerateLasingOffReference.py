@@ -177,6 +177,13 @@ class GenerateLasingOffReference(object):
                     if not ok: #If the information is not good, we skip the event
                         continue
 
+                    id = evt.get(psana.EventId)
+                    time = id.time()
+                    sec  = time[0]
+                    nsec = time[1]
+                    shotToShot['unixtime'] = int((sec<<32)|nsec)
+                    shotToShot['fiducial'] = id.fiducials()
+
                     #Subtract the dark background, taking into account properly possible different ROIs, if it is available
                     if db:        
                         img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) 

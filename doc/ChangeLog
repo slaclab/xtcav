@@ -11,6 +11,11 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-15
+2016-02-19 Christopher O'Grady
+Add timestamp of one of the lasing-off shots into the lasing-off constants, so that
+shot can be viewed later by jumping to it.
+
 From Alvaro Sanchez-Gonzalez	
 
 -Greatly improved performance by optimizing some of the calculations performed for the autothreshold and the scipylabel algorithms. This was originally causing some jobs to swap memory too often making them really slow.

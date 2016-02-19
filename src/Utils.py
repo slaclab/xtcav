@@ -265,6 +265,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
 
     powerrawECOM=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in GW based on ECOM without gas detector normalization
     powerrawERMS=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
+    groupnum=np.zeros(NB, dtype=np.int32);                  #group number of lasing off shot
              
     
     #We treat each bunch separately
@@ -300,6 +301,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
         order=np.argsort(err)
         refInd=order[-1];
+        groupnum[j]=refInd
         
         #The change in the delay and in energy with respect to the same bunch for the no lasing reference
         bunchdelaychange[j]=distT-nolasingAveragedProfiles['distT'][j,refInd]
@@ -369,7 +371,8 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
         'nolasingECOM':nolasingECOM,            #No lasing energy center of masses for each time in MeV
         'lasingERMS':lasingERMS,                #Lasing energy dispersion for each time in MeV
         'nolasingERMS':nolasingERMS,            #No lasing energy dispersion for each time in MeV
-        'NB': NB                                #Number of bunches
+        'NB': NB,                               #Number of bunches
+        'groupnum': groupnum                    #group number of lasing-off shot
         }
     
     
@@ -425,6 +428,8 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
     averageDistE=np.zeros((NB,NG), dtype=np.float64);                 #Distance in energy of the center of masses with respect to the center of the first bunch in MeV
     averageTRMS=np.zeros((NB,NG), dtype=np.float64);                  #Total dispersion in time in fs
     averageERMS=np.zeros((NB,NG), dtype=np.float64);                  #Total dispersion in energy in MeV
+    eventTime=np.zeros((NB,NG), dtype=np.uint64)
+    eventFid=np.zeros((NB,NG), dtype=np.uint32)
     
     #We treat each bunch separately, even group them separately
     for j in range(NB):
@@ -461,6 +466,8 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
             for i in range(N):    
                 if group[i]==g:             #We find the profiles that belong to that group and average them together
                 
+                    eventTime[j][g] = listShotToShot[i]['unixtime']
+                    eventFid[j][g] = listShotToShot[i]['fiducial']
                     distT=(listImageStats[i][j]['xCOM']-listImageStats[i][0]['xCOM'])*listPU[i]['xfsPerPix'] #Distance in time converted form pixels to fs
                     distE=(listImageStats[i][j]['yCOM']-listImageStats[i][0]['yCOM'])*listPU[i]['yMeVPerPix'] #Distance in time converted form pixels to MeV
                     averageDistT[j,g]=averageDistT[j,g]+distT       #Accumulate it in the right group
@@ -505,7 +512,9 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
         'tRMS': averageTRMS,            #Total dispersion in time in fs
         'eRMS': averageERMS,            #Total dispersion in energy in MeV
         'NB': NB,                       #Number of bunches
-        'NG': NG                        #Number of profiles
+        'NG': NG,                       #Number of profiles
+        'eventTime': eventTime,         #Unix times used for jumping to events
+        'eventFid': eventFid            #Fiducial values used for jumping to events
         }
             
     return averagedProfiles
