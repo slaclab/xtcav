@@ -127,7 +127,6 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
     maxX=(ROI['x0']+ROI['xN']-1)-ROI_db['x0'];
     minY=ROI['y0']-ROI_db['y0'];
     maxY=(ROI['y0']+ROI['yN']-1)-ROI_db['y0'];    
-    
     image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
        
     return image,ROI
@@ -263,6 +262,9 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     nolasingERMS=np.zeros((NB,t.size), dtype=np.float64);       #No lasing energy dispersion for each time in MeV
     powerECOM=np.zeros((NB,t.size), dtype=np.float64);      #Retrieved power in GW based on ECOM
     powerERMS=np.zeros((NB,t.size), dtype=np.float64);      #Retrieved power in GW based on ERMS
+
+    powerrawECOM=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in GW based on ECOM without gas detector normalization
+    powerrawERMS=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
              
     
     #We treat each bunch separately
@@ -329,9 +331,10 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
         
         #First calculation of the power based on center of masses and dispersion for each bunch
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*eCharge*1e6)*eCurrent    #In J/s
-        powerERMS[j,:]=(lasingERMS[j,:]**2-nolasingERMS[j,:]**2)*(eCurrent**(2.0/3.0)) # In J/s
+        powerERMS[j,:]=(lasingERMS[j,:]**2-nolasingERMS[j,:]**2)*(eCurrent**(2.0/3.0)) #
         
-         
+    powerrawECOM=powerECOM*1e-9 
+    powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
     eoffsetfactor=(shotToShot['xrayenergy']-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
     escalefactor=np.sum(powerERMS)*dt*1e-15                 #in J
@@ -348,6 +351,8 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     #Create the output structure
     pulsecharacterization={
         't':t,                                  #Master time vector in fs
+        'powerrawECOM':powerrawECOM,              #Retrieved power in GW based on ECOM without gas detector normalization
+        'powerrawERMS':powerrawERMS,              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
         'powerECOM':powerECOM,              #Retrieved power in GW based on ECOM
         'powerERMS':powerERMS,              #Retrieved power in GW based on ERMS
         'powerAgreement':powerAgreement,        #Agreement between the two intensities
@@ -596,7 +601,6 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
 
     signflip = np.sign(cosphasediff); #It may need to be flipped depending on the phase
 
-    
     xfsPerPix = signflip*xfsPerPix;    
     
     xfs=xfsPerPix*(ROI['x']-center[0])                  #x axis in fs around the center of mass
@@ -679,6 +683,7 @@ def GetXTCAVImageROI(epicsStore):
     roiYN=epicsStore.value('XTCAV_ROI_sizeY')
     roiY=epicsStore.value('XTCAV_ROI_startY')
 
+    #roiX=0; roiY=87; roiXN=1024; roiYN=850;
     if roiX==None:           #Try old values   
         roiXN=epicsStore.value('ROI_X_Length')
         roiX=epicsStore.value('ROI_X_Offset')
@@ -694,7 +699,7 @@ def GetXTCAVImageROI(epicsStore):
     if roiX==None: #Some hardcoded values        
         warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
         ok=0
-        roiXN=0#1024                                 
+        roiXN=1024                                 
         roiX=0
         roiYN=1024
         roiY=0
@@ -709,7 +714,6 @@ def GetXTCAVImageROI(epicsStore):
         'y0' :roiY,             #Position of the first pixel in y
         'xN' :roiXN,            #Size of the image in X
         'yN' :roiYN};           #Size of the image in Y 
-           
     return ROI,ok
     
 def ShotToShotParameters(ebeam,gasdetector):
