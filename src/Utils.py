@@ -1079,11 +1079,11 @@ def IslandSplittingAutoThreshold(image,N):
         #Number of valid images for the output
         n_valid=np.amin([N,n_groups,n_area_valid])    
         
-        #If there are tow few islands we decrease the upper limit, because we thresholded too much
+        #If there are too few islands we decrease the upper limit, because we thresholded too much
         if n_valid<N and n_groups<N:
             thres1=thres
         #If there are the right number of islands, we decrease the upper limit to see if we could get the same with a smaller threshold
-        if n_valid==N:
+        elif n_valid==N:
             thres1=thres
         #In any other case, we have to threshold more
         else:
