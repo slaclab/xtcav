@@ -79,11 +79,10 @@ def GetImageStatistics(image,x,y):
     ind=np.where(yProfile >= np.amax(yProfile)/2);
     yFWHM=np.abs(ind[-1]-ind[0]);                       #FWHM of the Y profile
     
-    yCOMslice=np.dot(np.transpose(image),y)/xProfile;   #Y position of the center of mass for each slice in x
-    yCOMslice[np.isnan(yCOMslice)]=yCOM                 #If it is NaN we just set the total y center of mass
+    yCOMslice=divideNoWarn(np.dot(np.transpose(image),y),xProfile,yCOM);   #Y position of the center of mass for each slice in x
     distances=np.outer(np.ones(yCOMslice.shape[0]),y)-np.outer(yCOMslice,np.ones(image.shape[0]))    #For each point of the image, the distance to the y center of mass of the corresponding slice
-    yRMSslice= np.sqrt(np.sum(np.transpose(image)*((distances)**2),1)/xProfile)         #Width of the distribution of the points for each slice around the y center of masses                  
-    yRMSslice[np.isnan(yRMSslice)]=0;                   #If it is NaN we just set it to 0
+    yRMSslice= divideNoWarn(np.sum(np.transpose(image)*((distances)**2),1),xProfile,0)         #Width of the distribution of the points for each slice around the y center of masses                  
+    yRMSslice = np.sqrt(yRMSslice)
     
     if imFrac==0:   #What to to if the image was effectively full of zeros
         xCOM=(x[-1]+x[0])/2.0;
@@ -1261,3 +1260,10 @@ def IslandSplittingContour(image,ratio1,ratio2):
     
     
     return outimages
+
+# http://stackoverflow.com/questions/26248654/numpy-return-0-with-divide-by-zero
+def divideNoWarn(numer,denom,default):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratio=numer/denom
+        ratio[ ~ np.isfinite(ratio)]=default  # NaN/+inf/-inf 
+    return ratio

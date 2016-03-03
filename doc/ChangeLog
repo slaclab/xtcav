@@ -11,7 +11,11 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
--Small typo in comment, and small error in the autorheshold algorithm, which probably did not have any consequences, except for making it a bit slower, but that could have them in certain scenarios.
+Tag: V00-00-17
+2016-02-19 Christopher O'Grady
+Suppress divide-by-zero warnings in Utils.py.
+Also this comment from Alvaro:
+-Small typo in comment, and small error in the autothreshold algorithm, which probably did not have any consequences, except for making it a bit slower, but that could have them in certain scenarios.
 
 Tag: V00-00-16
 2016-02-19 Christopher O'Grady
