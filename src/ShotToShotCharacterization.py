@@ -13,6 +13,7 @@ import getopt
 import math
 import warnings
 import Utils as xtu
+import UtilsPsana as xtup
 from DarkBackground import *
 from LasingOffReference import *
 from CalibrationPaths import *
@@ -234,8 +235,8 @@ class ShotToShotCharacterization(object):
         if not self._envinfo:
             self._experiment=self._env.experiment()
             epicsstore=self._env.epicsStore();
-            self._globalCalibration,ok1=xtu.GetGlobalXTCAVCalibration(epicsstore)
-            self._roixtcav,ok2=xtu.GetXTCAVImageROI(epicsstore) 
+            self._globalCalibration,ok1=xtup.GetGlobalXTCAVCalibration(epicsstore)
+            self._roixtcav,ok2=xtup.GetXTCAVImageROI(epicsstore) 
             if ok1 and ok2: #If the information is not good, we try next event
                 self._envinfo=True
             else:
@@ -296,7 +297,7 @@ class ShotToShotCharacterization(object):
             if not self.ProcessShotStep1():
                 return False
 
-        shotToShot,ok = xtu.ShotToShotParameters(self._ebeam,self._gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        shotToShot,ok = xtup.ShotToShotParameters(self._ebeam,self._gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         if not ok: #If the information is not good, we skip the event
             return False
                    
@@ -348,14 +349,33 @@ class ShotToShotCharacterization(object):
         self._eventresultsstep3=xtu.ProcessLasingSingleShot(self._eventresultsstep2['PU'],self._eventresultsstep2['imageStats'],self._eventresultsstep2['shotToShot'],self._lasingoffreference.averagedProfiles) 
         self._currenteventprocessedstep3=True  
         return True            
+        
+    def GetPhysicalUnitsResults(self):
+        """
+        Method which returns a dictionary based list with the physical units for the cropped image
 
+        Returns: 
+            out1: List with the results
+                'yMeVPerPix':         Number of MeV per pixel for the vertical axis of the image
+                'xfsPerPix':          Number of fs per pixel for the horizontal axis of the image
+                'xfs':                Horizontal axis of the image in fs
+                'yMeV':               Vertical axis of the image in MeV
+            out2: True if the retrieval was successful, False otherwise. 
+        """
+    
+        if not self._currenteventprocessedstep2:
+            if not self.ProcessShotStep2():
+                return None,False
+        
+        return self._eventresultsstep2['PU'],True                
+        
     def GetFullResults(self):
         """
         Method which returns a dictionary based list with the full results of the characterization
 
         Returns: 
             out1: List with the results
-                 't':                           Master time vector in fs
+                't':                           Master time vector in fs
                 'powerECOM':                    Retrieved power in GW based on ECOM
                 'powerERMS':                    Retrieved power in GW based on ERMS
                 'powerAgreement':               Agreement between the two intensities
@@ -654,7 +674,7 @@ class ShotToShotCharacterization(object):
         elif method=='RMSCOM':
             power=(self._eventresultsstep3['powerECOM']+self._eventresultsstep3['powerERMS'])/2
         else:
-            return [],False  
+            return t,[],False  
             
         return t,power,True         
         
@@ -754,7 +774,7 @@ class ShotToShotCharacterization(object):
         if not self._currenteventprocessedstep1:
             if not self.ProcessShotStep1():
                 return [],False
-            
+          
         return self._eventresultsstep1['processedImage'],True
         
     def ProcessedXTCAVImageROI(self):    

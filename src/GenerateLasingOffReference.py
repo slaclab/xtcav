@@ -11,6 +11,7 @@ import sys
 import getopt
 import warnings
 import Utils as xtu
+import UtilsPsana as xtup
 from DarkBackground import *
 from LasingOffReference import *
 from CalibrationPaths import *
@@ -146,13 +147,13 @@ class GenerateLasingOffReference(object):
 
                 #After the first event the epics store should contain the ROI of the xtcav images and the calibration of the XTCAV
                 if not 'ROI_XTCAV' in locals(): 
-                    ROI_XTCAV,ok=xtu.GetXTCAVImageROI(epicsStore) 
+                    ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore) 
                     if not ok: #If the information is not good, we try next event
                         del ROI_XTCAV
                         continue
 
                 if not 'globalCalibration' in locals():
-                    globalCalibration,ok=xtu.GetGlobalXTCAVCalibration(epicsStore)
+                    globalCalibration,ok=xtup.GetGlobalXTCAVCalibration(epicsStore)
                     if not ok: #If the information is not good, we try next event
                         del globalCalibration
                         continue
@@ -177,10 +178,10 @@ class GenerateLasingOffReference(object):
                     img=frame.data16().astype(np.float64)
 
                     if np.max(img)>=16383 : #Detection if the image is saturated, we skip if it is
-                        print 'Saturated Image'
+                        warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
                         continue
    
-                    shotToShot,ok = xtu.ShotToShotParameters(ebeam,gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+                    shotToShot,ok = xtup.ShotToShotParameters(ebeam,gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
                     if not ok: #If the information is not good, we skip the event
                         continue
 
@@ -190,7 +191,7 @@ class GenerateLasingOffReference(object):
                     nsec = time[1]
                     shotToShot['unixtime'] = int((sec<<32)|nsec)
                     shotToShot['fiducial'] = id.fiducials()
-
+                    
                     #Subtract the dark background, taking into account properly possible different ROIs, if it is available
                     if db:        
                         img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) 
@@ -232,7 +233,7 @@ class GenerateLasingOffReference(object):
                     n_r=n_r+1
                     # print core numb and percentage
 
-                    if current_shot % 5 == 0:
+                    if current_shot % 20 == 0:
                         print 'Core %d: %.1f %% done, %d / %d' % (rank + 1, float(current_shot) / np.ceil(self._maxshots/float(size)) *100, current_shot, np.ceil(self._maxshots/float(size)))
                         sys.stdout.flush()
                     current_shot += 1

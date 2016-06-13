@@ -1,7 +1,7 @@
 
 import numpy
-from xtcav.Constants import Load as constLoad
-from xtcav.Constants import Save as constSave
+from Constants import Load as constLoad
+from Constants import Save as constSave
 
 class DarkBackground(object):
     def __init__(self):

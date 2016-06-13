@@ -9,7 +9,8 @@ import glob
 import sys
 import getopt
 import warnings
-import Utils as xtu   #HACK
+import Utils as xtu
+import UtilsPsana as xtup
 from DarkBackground import *
 from CalibrationPaths import *
 
@@ -70,32 +71,27 @@ class GenerateDarkBackground(object):
             times = run.times()
             for t in range(len(times)-1,-1,-1): #Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
                 evt=run.event(times[t])
-                #ignore shots without xtcav, because we can get
-                #incorrect EPICS information (e.g. ROI).  this is
-                #a workaround for the fact that xtcav only records
-                #epics on shots where it has camera data, as well
-                #as an incorrect design in psana where epics information
-                #is not stored per-shot (it is in a more global object
-                #called "Env")
-                frame = evt.get(xtcav_type, xtcav_camera) 
-                if frame is None: continue
             
                 if not 'ROI_XTCAV' in locals():   #After the first event the epics store should contain the ROI of the xtcav images, that let us get the x and y vectors
-                    ROI_XTCAV,ok=xtu.GetXTCAVImageROI(epicsStore)             
+                    ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore)             
                     if not ok: #If the information is not good, we try next event
                         del ROI_XTCAV
                         continue
                     accumulator_xtcav=np.zeros(( ROI_XTCAV['yN'],ROI_XTCAV['xN']), dtype=np.float64)
                             
+                frame = evt.get(xtcav_type, xtcav_camera) 
                 if frame:                       #For each shot that contains an xtcav frame we retrieve it and add it to the accumulators
                     img=frame.data16().astype(np.float64)
                     
                     n=n+1
                     n_r=n_r+1
-                    print "%d/%d" % (n_r,self._maxshots) #Debugging purposes, will be removed
                     
                     accumulator_xtcav=accumulator_xtcav+img 
-                                           
+                    
+                if n_r % 25 == 0:
+                    print '%.1f %% done, %d / %d' % ( float(n_r) / self._maxshots*100, n_r,self._maxshots )
+                    sys.stdout.flush()                            
+                                  
                 if n_r>=self._maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
                     break      
 

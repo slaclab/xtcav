@@ -11,6 +11,12 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+-Added method GetPhysicalUnitsResults, to obtain the physical axis of the cropped xtcav image
+-Removed some "xtcav." when loading modules from modules which also belong to xtcav.
+-Refactoring the Utils.py into Utils.py and UtilsPsana.py, to separate purely algorithmic functions, from functions which fetch data from psana.
+-Modified DenoiseFilter to be less sensitive to noise, and locate empty images easier.
+-Added an ipython notebook with further examples.
+
 Tag: V00-00-18
 2016-03-17 Christopher O'Grady
 It appears the bug fix in V00-00-16 was only put in
