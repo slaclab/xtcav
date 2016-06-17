@@ -88,14 +88,12 @@ class GenerateDarkBackground(object):
                     
                     accumulator_xtcav=accumulator_xtcav+img 
                     
-                if n_r % 25 == 0:
-                    print '%.1f %% done, %d / %d' % ( float(n_r) / self._maxshots*100, n_r,self._maxshots )
-                    sys.stdout.flush()                            
-                                  
+                if n_r % 5 == 0:
+                    sys.stdout.write('\r%.1f %% done, %d / %d' % ( float(n_r) / self._maxshots*100, n_r,self._maxshots ))
+                    sys.stdout.flush()   
                 if n_r>=self._maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
-                    break      
-
-        
+                    sys.stdout.write('\n')
+                    break                          
         #At the end of the program the total accumulator is saved     
         db=DarkBackground()
         db.n=n

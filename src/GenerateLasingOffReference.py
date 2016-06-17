@@ -21,7 +21,7 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-print 'Core %s ... ready' % (rank + 1) # useful for debugging purposes
+#print 'Core %s ... ready' % (rank + 1) # useful for debugging purposes
 sys.stdout.flush()
 
 class GenerateLasingOffReference(object):
@@ -233,11 +233,14 @@ class GenerateLasingOffReference(object):
                     n_r=n_r+1
                     # print core numb and percentage
 
-                    if current_shot % 20 == 0:
-                        print 'Core %d: %.1f %% done, %d / %d' % (rank + 1, float(current_shot) / np.ceil(self._maxshots/float(size)) *100, current_shot, np.ceil(self._maxshots/float(size)))
+                    if current_shot % 5 == 0:
+                        if size==1:extrainfo='\r'
+                        else:extrainfo='\nCore %d: '%(rank + 1)
+                        sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(current_shot) / np.ceil(self._maxshots/float(size)) *100, current_shot, np.ceil(self._maxshots/float(size))))
                         sys.stdout.flush()
                     current_shot += 1
                     if current_shot >= np.ceil(self._maxshots/float(size)):
+                        sys.stdout.write('\n')
                         break
 
         #  here gather all shots in one core, add all lists

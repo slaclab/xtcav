@@ -16,6 +16,8 @@ reverse time order.
 -Refactoring the Utils.py into Utils.py and UtilsPsana.py, to separate purely algorithmic functions, from functions which fetch data from psana.
 -Modified DenoiseFilter to be less sensitive to noise, and locate empty images easier.
 -Added an ipython notebook with further examples.
+-Modified progress messages when generating the references to overwrite the previous message.
+-Ready for tagging.
 
 Tag: V00-00-18
 2016-03-17 Christopher O'Grady
