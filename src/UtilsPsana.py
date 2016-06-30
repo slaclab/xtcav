@@ -17,8 +17,13 @@ def GetGlobalCalibValue(epicsStore,names,ok):
     warnings.warn_explicit('No XTCAV Calibration for epics variable'+name[0],UserWarning,'XTCAV',0)
     ok[0]=0 # notify caller that no value was found for a variable
     return 0
-    
-    
+
+def GetCameraSaturationValue(epicsStore):
+    if epicsStore.value('XTCAV_Analysis_Version') is not None:
+        return (1<<12)-1
+    else:
+        return (1<<14)-1
+
 def GetGlobalXTCAVCalibration(epicsStore):
     """
     Obtain the global XTCAV calibration form the epicsStore

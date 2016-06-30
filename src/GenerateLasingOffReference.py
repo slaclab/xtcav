@@ -154,6 +154,7 @@ class GenerateLasingOffReference(object):
 
                 if not 'globalCalibration' in locals():
                     globalCalibration,ok=xtup.GetGlobalXTCAVCalibration(epicsStore)
+                    self._saturationValue = xtup.GetCameraSaturationValue(epicsStore)
                     if not ok: #If the information is not good, we try next event
                         del globalCalibration
                         continue
@@ -177,7 +178,7 @@ class GenerateLasingOffReference(object):
                 if frame: #For each shot that contains an xtcav frame we retrieve it        
                     img=frame.data16().astype(np.float64)
 
-                    if np.max(img)>=16383 : #Detection if the image is saturated, we skip if it is
+                    if np.max(img)>=self._saturationValue : #Detection if the image is saturated, we skip if it is
                         warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
                         continue
    

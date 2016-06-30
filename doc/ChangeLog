@@ -11,6 +11,13 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-19
+2016-06-30 Christopher O'Grady
+Include modifications from Alvaro described below and re-add protections
+for bad ROI numbers in GenerateDarkBackground.py that seemed to get
+lost in the most recent commit.  Check version vriable (in epics) to
+automatically get the correct saturation value for the camera.
+
 -Added method GetPhysicalUnitsResults, to obtain the physical axis of the cropped xtcav image
 -Removed some "xtcav." when loading modules from modules which also belong to xtcav.
 -Refactoring the Utils.py into Utils.py and UtilsPsana.py, to separate purely algorithmic functions, from functions which fetch data from psana.
@@ -46,7 +53,7 @@ Tag: V00-00-15
 Add timestamp of one of the lasing-off shots into the lasing-off constants, so that
 shot can be viewed later by jumping to it.
 
-From Alvaro Sanchez-Gonzalez	
+From Alvaro Sanchez-Gonzalez
 
 
 -The full results structure now also returns the power obtained from the RMS and COM method without gas detector normalization.

@@ -236,6 +236,7 @@ class ShotToShotCharacterization(object):
             self._experiment=self._env.experiment()
             epicsstore=self._env.epicsStore();
             self._globalCalibration,ok1=xtup.GetGlobalXTCAVCalibration(epicsstore)
+            self._saturationValue = xtup.GetCameraSaturationValue(epicsstore)
             self._roixtcav,ok2=xtup.GetXTCAVImageROI(epicsstore) 
             if ok1 and ok2: #If the information is not good, we try next event
                 self._envinfo=True
@@ -248,8 +249,8 @@ class ShotToShotCharacterization(object):
         
         if not self._loadeddarkreference:
             self.LoadDarkReference()
-                                                            
-        if np.max(self._rawimage)>=16383 : #Detection if the image is saturated, we skip if it is
+
+        if np.max(self._rawimage)>=self._saturationValue : #Detection if the image is saturated, we skip if it is
             warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
                                     
         #Subtract the dark background, taking into account properly possible different ROIs
