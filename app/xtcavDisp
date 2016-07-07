@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+from psana import *
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("exprun", help="psana experiment/run string (e.g. exp=xppd7114:run=43)")
+args = parser.parse_args()
+
+ds = DataSource(args.exprun)
+xtcav = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds.env())
+gdet = Detector('FEEGasDetEnergy')
+
+def getLasingOffShot(XTCAVRetrieval,expt):
+    results=XTCAVRetrieval._eventresultsstep3
+    lor = XTCAVRetrieval._lasingoffreference
+    ibunch = 0
+
+    group = results['groupnum'][ibunch]
+    profs = lor.averagedProfiles
+
+    ds_lasingoff = DataSource('exp=%s:run=%d:idx'%(expt,lor.runs[0]))
+    run = ds_lasingoff.runs().next()
+    times = run.times()
+    time = profs['eventTime'][ibunch][group]
+    fid = profs['eventFid'][ibunch][group]
+    et = EventTime(int(time),int(fid))
+    evt_lasingoff = run.event(et)
+    xtcav_lasingoff = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds_lasingoff.env())
+    if xtcav_lasingoff is None:
+        print 'No lasing off image found for unixtime',time,'and fiducials',fid
+    print 'Found lasing off shot in run',lor.runs[0]
+    return xtcav_lasingoff.raw(evt_lasingoff)
+
+import matplotlib.pyplot as plt
+from xtcav.ShotToShotCharacterization import *
+XTCAVRetrieval=ShotToShotCharacterization();
+XTCAVRetrieval.SetEnv(ds.env())
+for evt in ds.events():
+    raw = xtcav.raw(evt)
+    gd = gdet.get(evt)
+    if raw is None: continue
+    if gd is None: continue
+    if not XTCAVRetrieval.SetCurrentEvent(evt):
+        continue
+    time,power,ok=XTCAVRetrieval.XRayPower() 
+    agreement,ok=XTCAVRetrieval.ReconstructionAgreement()
+    print 'Agreement:',agreement,'OK:',ok,'Gasdet:',gd.f_11_ENRC()
+    if not ok or agreement<0.5: continue
+    results=XTCAVRetrieval._eventresultsstep3
+
+    xtcav_lasingoff = getLasingOffShot(XTCAVRetrieval,ds.env().experiment())
+
+    plt.subplot(3,2,1)
+    plt.title('Lasing On')
+    plt.imshow(raw)
+
+    plt.subplot(3,2,2)
+    plt.title('Lasing Off')
+    plt.imshow(xtcav_lasingoff)
+
+    plt.subplot(3,2,3)
+    plt.title('Current')
+    plt.plot(time[0],results['lasingECurrent'][0],label='lasing')
+    plt.plot(time[0],results['nolasingECurrent'][0],label='nolasing')
+    plt.legend()
+
+    plt.subplot(3,2,4)
+    plt.title('E (Delta)')
+    plt.plot(time[0],results['lasingECOM'][0],label='lasing')
+    plt.plot(time[0],results['nolasingECOM'][0],label='nolasing')
+    plt.legend()
+
+    plt.subplot(3,2,5)
+    plt.title('E (Sigma)')
+    plt.plot(time[0],results['lasingERMS'][0],label='lasing')
+    plt.plot(time[0],results['nolasingERMS'][0],label='nolasing')
+    plt.legend()
+
+    plt.subplot(3,2,6)
+    plt.title('Power')
+    plt.plot(time[0],power[0])
+
+    plt.show()
+
+# available quantities from step3, from xtcav/src/Utils.py:ProcessLasingSingleShot
+
+# 't':t,                                  #Master time vector in fs
+# 'powerECOM':powerECOM,              #Retrieved power in GW based on ECOM
+# 'powerERMS':powerERMS,              #Retrieved power in GW based on ERMS
+# 'powerAgreement':powerAgreement,        #Agreement between the two intensities
+# 'bunchdelay':bunchdelay,                #Delay from each bunch with respect to the first one in fs
+# 'bunchdelaychange':bunchdelaychange,    #Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
+# 'xrayenergy':shotToShot['xrayenergy'],  #Total x-ray energy from the gas detector in J
+# 'lasingenergyperbunchECOM': eBunchCOM,  #Energy of the XRays generated from each bunch for the center of mass approach in J
+# 'lasingenergyperbunchERMS': eBunchRMS,  #Energy of the XRays generated from each bunch for the dispersion approach in J
+# 'bunchenergydiff':bunchenergydiff,                  #Distance in energy for each bunch with respect to the first one in MeV
+# 'bunchenergydiffchange':bunchenergydiffchange,      #Comparison of that distance with respect to the no lasing
+# 'lasingECurrent':lasingECurrent,        #Electron current for the lasing trace (In #electrons/s)
+# 'nolasingECurrent':nolasingECurrent,    #Electron current for the no lasing trace (In #electrons/s)
+# 'lasingECOM':lasingECOM,                #Lasing energy center of masses for each time in MeV
+# 'nolasingECOM':nolasingECOM,            #No lasing energy center of masses for each time in MeV
+# 'lasingERMS':lasingERMS,                #Lasing energy dispersion for each time in MeV
+# 'nolasingERMS':nolasingERMS,            #No lasing energy dispersion for each time in MeV
+# 'NB': NB,                               #Number of bunches
+# 'groupnum': groupnum                    #group number of lasing-off shot
