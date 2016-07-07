@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-20
+2016-07-06 Christopher O'Grady
+Add xtcavDisp utility in app/ to display lasing-on/off information.
+
 Tag: V00-00-19
 2016-06-30 Christopher O'Grady
 Include modifications from Alvaro described below and re-add protections
