@@ -905,7 +905,7 @@ def IslandSplittingAutoThreshold(image,N):
     n_valid=0
     iternum=0
     maxiter=17
-    
+    prevGood=False
     while (iternum<maxiter):
         #On each iteration we set the threshold to the middle value between the edges 
         if iternum==maxiter-1:
@@ -942,17 +942,22 @@ def IslandSplittingAutoThreshold(image,N):
 
         #Number of valid images for the output
         n_valid=np.amin([N,n_groups,n_area_valid])    
-        
+        #print [thres0,thres1],thres,n_valid,n_groups,areas[orderareaind]        
         #If there are too few islands we decrease the upper limit, because we thresholded too much
-        if n_valid<N and n_groups<N:
-            thres1=thres
+        if n_valid<N:
+            if prevGood==False: #If we have never seen a value that works, we keep going down
+                thres1=thres
+            else: #If we have seen a value that works we go up, because we went down too much from that value
+                thres0=thres
+                
         #If there are the right number of islands, we decrease the upper limit to see if we could get the same with a smaller threshold
         elif n_valid==N:
+            prevGood=True
             thres1=thres
         #In any other case, we have to threshold more
         else:
             thres0=thres
-        
+
         iternum+=1
     
     #Obtain the separated images
