@@ -11,6 +11,8 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+-Solved problem with the autothresholding algorithm. It was failing for images where the valley between the two bunches was close to the amplitude of one the bunches.
+
 Tag: V00-00-20
 2016-07-06 Christopher O'Grady
 Add xtcavDisp utility in app/ to display lasing-on/off information.
