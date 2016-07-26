@@ -11,6 +11,10 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-21
+2016-07-26 Christopher O'Grady
+Include Alvaro's changes below and add a missing import statement.
+
 -Solved problem with the autothresholding algorithm. It was failing for images where the valley between the two bunches was close to the amplitude of one the bunches.
 
 Tag: V00-00-20
