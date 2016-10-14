@@ -1,5 +1,6 @@
 from psana import *
 from PSCalib.CalibFileFinder import CalibFileFinder
+import os
 
 class CalibrationPaths:
     def __init__(self,env,calibdir=''):
