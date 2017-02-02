@@ -11,6 +11,11 @@ Package author: Alvaro Sanchez-Gonzalez
 Please describe any modifications that you made to the package in the
 reverse time order.
 
+Tag: V00-00-23
+2017-02-02 Clemens Weninger
+Fix: cast float arrays to int to make the code work with recent versions of
+numpy
+
 Tag: V00-00-22
 2016-10-14 Christopher O'Grady
 Fix missing "import os" in CalibrationPaths.py

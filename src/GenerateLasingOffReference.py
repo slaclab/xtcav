@@ -116,7 +116,7 @@ class GenerateLasingOffReference(object):
             
             ns = len(times) #  The number of shots in this run
             tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:
-            comb1 = np.tile(tiling, np.ceil(ns/(4.*size)))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]
+            comb1 = np.tile(tiling, np.ceil(ns/(4.*size)).astype(np.int))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]
             comb2 = np.repeat(np.arange(0, np.ceil(ns/(4.*size)), 1), 4) # returns [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, ...]
             #  list of shot numbers assigned to this core
             main = comb2*4*size + comb1  # returns [  0.   1.   2.   3.  16.  17.  18.  19.  32.  33. ... ]
