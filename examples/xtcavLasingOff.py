@@ -1,8 +1,8 @@
 from xtcav.GenerateLasingOffReference import *
 
 GLOC=GenerateLasingOffReference();
-GLOC.experiment='amoc8114'
-GLOC.runs='86'
+GLOC.experiment='amox23616'
+GLOC.runs='131'
 GLOC.maxshots=401
 GLOC.nb=1
 GLOC.groupsize=5

@@ -162,14 +162,15 @@ def DenoiseImage(image,medianfilter,snrfilter):
     thres=snrfilter*std;    
     image[image < thres ] = 0 
     #We also normalize the image to have a total area of one
-    if(np.sum(image)>0):
-        if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
-            warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-            ok=0
-        image=image/np.sum(image)
-    else:
-        warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-        ok=0        
+#    if(np.sum(image)>0):
+ #       if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
+  #          warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
+   #         ok=0
+    print "here" 
+    image=image/np.sum(image)
+    #else:
+     #   warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
+      #  ok=0        
     
     return image,ok
 
