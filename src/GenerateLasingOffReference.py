@@ -81,13 +81,15 @@ class GenerateLasingOffReference(object):
 
         #Camera and type for the xtcav images
         xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
+        #xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
+        #xtcav_camera.set_do_offset(do_offset=False)
         xtcav_type=psana.Camera.FrameV1
 
         #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
-        ebeam_data=psana.Source('BldInfo(EBeam)')
+        ebeam_data = psana.Detector('EBeam')
 
         #Gas detectors for the pulse energies
-        gasdetector_data=psana.Source('BldInfo(FEEGasDetEnergy)')
+        gasdetector_data = psana.Detector('FEEGasDetEnergy')
 
         #Stores for environment variables   
         epicsStore = dataSource.env().epicsStore();
@@ -101,10 +103,9 @@ class GenerateLasingOffReference(object):
         listPU=[]
  
         runs=numpy.array([],dtype=int) #Array that contains the run processed run numbers
-        #for r,run in enumerate(dataSource.runs()):
-        for r in [0]: 
+        for r,run in enumerate(dataSource.runs()):
             
-            run=dataSource.runs().next(); #This line and the previous line are a temporal hack to go only through the first run, that avoids an unexpected block when calling next at the iterator, when there are not remaining runs.
+            #run=dataSource.runs().next(); #This line and the previous line are a temporal hack to go only through the first run, that avoids an unexpected block when calling next at the iterator, when there are not remaining runs.
             runs = numpy.append(runs,run.run());
             n_r=0 #Counter for the total number of xtcav images processed within the run        
             #for e, evt in enumerate(run.events()):
@@ -135,17 +136,9 @@ class GenerateLasingOffReference(object):
                 frame = evt.get(xtcav_type, xtcav_camera) 
                 if frame is None: continue
 
-                ebeam = evt.get(psana.Bld.BldDataEBeamV7,ebeam_data)
-                if not ebeam:
-                    ebeam = evt.get(psana.Bld.BldDataEBeamV6,ebeam_data)
-                if not ebeam:
-                    ebeam = evt.get(psana.Bld.BldDataEBeamV5,ebeam_data)
+                ebeam = ebeam_data.get(evt)
+                gasdetector = gasdetector_data.get(evt)
 
-                gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,gasdetector_data) 
-                if not gasdetector:
-                    gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergyV1,gasdetector_data) 
-
-                #After the first event the epics store should contain the ROI of the xtcav images and the calibration of the XTCAV
                 if not 'ROI_XTCAV' in locals(): 
                     ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore) 
                     if not ok: #If the information is not good, we try next event

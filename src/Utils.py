@@ -166,7 +166,6 @@ def DenoiseImage(image,medianfilter,snrfilter):
  #       if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
   #          warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
    #         ok=0
-    print "here" 
     image=image/np.sum(image)
     #else:
      #   warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)

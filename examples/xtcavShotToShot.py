@@ -2,8 +2,8 @@ import psana
 from xtcav.ShotToShotCharacterization import *
 
 maxshots=5             #Maximum number of valid shots to process
-experiment='amoc8114'  #Experiment label
-runs='87'              #Runs
+experiment='amox23616'  #Experiment label
+runs='131'              #Runs
 
 #Loading the dataset from the "dark" run, this way of working should be compatible with both xtc and hdf5 files
 dataSource=psana.DataSource("exp=%s:run=%s:idx" % (experiment,runs))
