@@ -7,10 +7,10 @@ class DarkBackground(object):
     def __init__(self):
         self.image=[]
         self.ROI=[]
-        self.runs=numpy.array([],dtype=int)
+        self.run=''
         self.n=0
         
-    def Save(self,path):        
+    def Save(self,path): 
         constSave(self,path)
         
     @staticmethod    

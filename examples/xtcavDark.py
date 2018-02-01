@@ -1,10 +1,8 @@
 from xtcav.GenerateDarkBackground import *
 
-GDB=GenerateDarkBackground();
-
-GDB.experiment='amox23616'
-GDB.runs='11'
-GDB.maxshots=150
-GDB.SetValidityRange(85,109)
-
-GDB.Generate();
+dark_background = generateDarkBackground(
+	experiment='amox23616', 
+	run_number='131', 
+	maxshots=150, 
+	validityrange=[85,109])
+print dark_background.n

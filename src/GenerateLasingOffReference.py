@@ -64,6 +64,10 @@ class GenerateLasingOffReference(object):
         self._islandsplitpar1 = 3.0                      #Ratio between number of pixels between largest and second largest groups when calling scipy.label
         self._islandsplitpar2 = 5.0                      #Ratio between number of pixels between second/third largest groups when calling scipy.label
         self._calpath=''
+
+        self.ROI_XTCAV = None
+        self.globalCalibration = None
+        self.db = None
         
     def Generate(self,savetofile=True):
         """
@@ -108,22 +112,19 @@ class GenerateLasingOffReference(object):
             #run=dataSource.runs().next(); #This line and the previous line are a temporal hack to go only through the first run, that avoids an unexpected block when calling next at the iterator, when there are not remaining runs.
             runs = numpy.append(runs,run.run());
             n_r=0 #Counter for the total number of xtcav images processed within the run        
-            #for e, evt in enumerate(run.events()):
             times = run.times()
 
             #  Parallel Processing implementation by andr0s and polo5
             #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
             #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
             
-            ns = len(times) #  The number of shots in this run
-            tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:
-            comb1 = np.tile(tiling, np.ceil(ns/(4.*size)).astype(np.int))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]
-            comb2 = np.repeat(np.arange(0, np.ceil(ns/(4.*size)), 1), 4) # returns [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, ...]
-            #  list of shot numbers assigned to this core
-            main = comb2*4*size + comb1  # returns [  0.   1.   2.   3.  16.  17.  18.  19.  32.  33. ... ]
-            main = np.delete(main, np.where(main>=ns))  # remove element if greater or equal to maximum number of shots in run
+            num_shots = len(times) #  The number of shots in this run
+            image_numbers = xtup.DivideImageTasks(num_shots, rank, size)
             current_shot = 0
-            for t in main[::-1]: #  Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
+
+            # initialize variables for setup later
+            
+            for t in image_numbers[::-1]: #  Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
                 evt=run.event(times[int(t)])
 
                 #ignore shots without xtcav, because we can get
@@ -134,36 +135,37 @@ class GenerateLasingOffReference(object):
                 #is not stored per-shot (it is in a more global object
                 #called "Env")
                 frame = evt.get(xtcav_type, xtcav_camera) 
-                if frame is None: continue
+                if frame is None: 
+                    continue
 
                 ebeam = ebeam_data.get(evt)
                 gasdetector = gasdetector_data.get(evt)
 
-                if not 'ROI_XTCAV' in locals(): 
-                    ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore) 
+                if not self.ROI_XTCAV: 
+                    roi, ok = xtup.GetXTCAVImageROI(epicsStore) 
                     if not ok: #If the information is not good, we try next event
-                        del ROI_XTCAV
                         continue
+                    self.ROI_XTCAV = roi
 
-                if not 'globalCalibration' in locals():
-                    globalCalibration,ok=xtup.GetGlobalXTCAVCalibration(epicsStore)
-                    self._saturationValue = xtup.GetCameraSaturationValue(epicsStore)
+                if not self.globalCalibration:
+                    gl_cal, ok = xtup.GetGlobalXTCAVCalibration(epicsStore)
                     if not ok: #If the information is not good, we try next event
-                        del globalCalibration
                         continue
+                    self.globalCalibration = gl_cal
+                    self._saturationValue = xtup.GetCameraSaturationValue(epicsStore)
 
                 #If we have not loaded the dark background information yet, we do
-                if not 'db' in locals():
+                if self.db is None:
                     if not self._darkreferencepath:
-                        cp=CalibrationPaths(dataSource.env(),self._calpath)
-                        self._darkreferencepath=cp.findCalFileName('pedestals',evt.run())
+                        cp = CalibrationPaths(dataSource.env(), self._calpath)
+                        self._darkreferencepath = cp.findCalFileName('pedestals',evt.run())
                         
                     if not self._darkreferencepath:
                         print ('Dark reference for run %d not found, image will not be background substracted' % evt.run())
                         self._loadeddarkreference=False 
-                        db=False
+                        self.db = False
                     else:
-                        db=DarkBackground.Load(self._darkreferencepath)
+                        self.db = DarkBackground.Load(self._darkreferencepath)
 
                     
                 
@@ -187,14 +189,15 @@ class GenerateLasingOffReference(object):
                     shotToShot['fiducial'] = id.fiducials()
                     
                     #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-                    if db:        
-                        img,ROI=xtu.SubtractBackground(img,ROI_XTCAV,db.image,db.ROI) 
+                    if self.db:        
+                        img, ROI=xtu.SubtractBackground(img, self.ROI_XTCAV, self.db.image, self.db.ROI) 
                     else:
-                        ROI=ROI_XTCAV
-                    img,ok=xtu.DenoiseImage(img,self._medianfilter,self._snrfilter)                    #Remove noise from the image and normalize it
+                        ROI = self.ROI_XTCAV
+                    img, ok=xtu.DenoiseImage(img, self._medianfilter, self._snrfilter)                    #Remove noise from the image and normalize it
                     if not ok:                                        #If there is nothing in the image we skip the event  
                         continue
-                    img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+
+                    img, ROI=xtu.FindROI(img, ROI, self._roiwaistthres, self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
                     if ROI['xN']<3 or ROI['yN']<3:
                         print 'ROI too small',ROI['xN'],ROI['yN']
                         continue
@@ -205,7 +208,7 @@ class GenerateLasingOffReference(object):
                         continue
                     imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
 
-                    PU,ok=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,globalCalibration)   
+                    PU, ok = xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,self.globalCalibration)   
                     if not ok:
                         continue
 
