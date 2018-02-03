@@ -1,8 +1,9 @@
 from xtcav.GenerateDarkBackground import *
+import numpy as np
 
 dark_background = generateDarkBackground(
-	experiment='amox23616', 
-	run_number='131', 
+	experiment='amoc8114', 
+	run_number='110', 
 	maxshots=150, 
 	validityrange=[85,109])
-print dark_background.n
+print np.sum(dark_background.image)

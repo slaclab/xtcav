@@ -44,55 +44,37 @@ def generateDarkBackground(
     
     #Loading the dataset from the "dark" run, this way of working should be compatible with both xtc and hdf5 files
     dataSource=psana.DataSource("exp=%s:run=%s:idx" % (experiment, run_number))
+    print "here"
     
     #Camera and type for the xtcav images
-    xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
-    xtcav_type=psana.Camera.FrameV1
-    #xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
+    xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
     
     #Stores for environment variables    
     configStore=dataSource.env().configStore();
     epicsStore=dataSource.env().epicsStore();
 
-    db=DarkBackground()
-
-    # ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore)             
-    # if not ok: #If the information is not good, we try next event
-    #     return db
-    # accumulator_xtcav=np.zeros(( ROI_XTCAV['yN'],ROI_XTCAV['xN']), dtype=np.float64)
-
-    n=0  #Counter for the total number of xtcav images processed
-     
+    n=0  #Counter for the total number of xtcav images processed 
     run = dataSource.runs().next()        
-        #for e, evt in enumerate(dataSource.events()):
+    
+
+    ROI_XTCAV, last_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
+    accumulator_xtcav=np.zeros((ROI_XTCAV.YN, ROI_XTCAV.XN), dtype=np.float64)
+
     times = run.times()
-    for t in range(len(times)-1,-1,-1): #Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
+    for t in range(last_image,-1,-1): #Starting from the last valid image, to avoid waits in the cases where there are not xtcav images for the first shots
         evt=run.event(times[t])
     
-        #ignore shots without xtcav, because we can get
-        #incorrect EPICS information (e.g. ROI).  this is
-        #a workaround for the fact that xtcav only records
-        #epics on shots where it has camera data, as well
-        #as an incorrect design in psana where epics information
-        #is not stored per-shot (it is in a more global object
+        #ignore shots without xtcav, because we can get incorrect EPICS information (e.g. ROI).  this is
+        #a workaround for the fact that xtcav only records epics on shots where it has camera data, as well
+        #as an incorrect design in psana where epics information is not stored per-shot (it is in a more global object
         #called "Env")
-        #frame = xtcav_camera.image(evt)
-        frame = evt.get(xtcav_type, xtcav_camera) 
-        if frame is None: 
+        img = xtcav_camera.image(evt)
+        # skip if empty image
+        if img is None: 
             continue
-
-        if not 'ROI_XTCAV' in locals():   #After the first event the epics store should contain the ROI of the xtcav images, that let us get the x and y vectors
-            ROI_XTCAV,ok=xtup.GetXTCAVImageROI(epicsStore)             
-            if not ok: #If the information is not good, we try next event
-                del ROI_XTCAV
-                continue
-            accumulator_xtcav=np.zeros(( ROI_XTCAV['yN'],ROI_XTCAV['xN']), dtype=np.float64)
-                    
-        #For each shot that contains an xtcav frame we retrieve it and add it to the accumulators
-        img=frame.data16().astype(np.float64)
-        
+      
+        accumulator_xtcav += img 
         n += 1
-        accumulator_xtcav = accumulator_xtcav+img 
             
         if n % 5 == 0:
             sys.stdout.write('\r%.1f %% done, %d / %d' % ( float(n) / maxshots*100, n, maxshots ))
@@ -100,7 +82,8 @@ def generateDarkBackground(
         if n>=maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
             sys.stdout.write('\n')
             break                          
-    #At the end of the program the total accumulator is saved     
+    #At the end of the program the total accumulator is saved  
+    db=DarkBackground()   
     db.n=n
     db.image=accumulator_xtcav/n
     db.ROI=ROI_XTCAV

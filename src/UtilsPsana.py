@@ -1,6 +1,7 @@
 import numpy as np
 import psana
 import warnings
+from ROIMetrics import *
 
 def GetGlobalCalibValue(epicsStore,names,ok):
     """
@@ -55,56 +56,32 @@ def GetGlobalXTCAVCalibration(epicsStore):
                 
     return globalCalibration,ok[0]
           
-    
-def GetXTCAVImageROI(epicsStore):
-    """
-    Obtain the ROI for the XTCAV image
-    Arguments:
-      epicsStore
-    Output:
-      ROI: struct with the ROI
-      ok: if all the data was retrieved correctly
-    """
 
-    ok=1
+def GetXTCAVImageROI(epicsStore, run, xtcav_camera):
+    roiXN=psana.Detector('XTCAV_ROI_sizeX')# epicsStore.value('XTCAV_ROI_sizeX')
+    roiX=psana.Detector('XTCAV_ROI_startX')#epicsStore.value('XTCAV_ROI_startX')
+    roiYN=psana.Detector('XTCAV_ROI_sizeY')#epicsStore.value('XTCAV_ROI_sizeY')
+    roiY=psana.Detector('XTCAV_ROI_startY')#epicsStore.value('XTCAV_ROI_startY')
+    times = run.times()
 
-    roiXN=epicsStore.value('XTCAV_ROI_sizeX')
-    roiX=epicsStore.value('XTCAV_ROI_startX')
-    roiYN=epicsStore.value('XTCAV_ROI_sizeY')
-    roiY=epicsStore.value('XTCAV_ROI_startY')
+    for t in range(len(times)-1,-1,-1):
+        evt=run.event(times[t])
+        img = xtcav_camera.image(evt)
+        # skip if empty image
+        if img is None: 
+            continue
+       
+        ROI_XTCAV = ROIMetrics(
+            roiXN(evt), 
+            roiX(evt), 
+            roiYN(evt), 
+            roiY(evt)
+        ) 
 
-    #roiX=0; roiY=87; roiXN=1024; roiYN=850;
-    if roiX==None:           #Try old values   
-        roiXN=epicsStore.value('ROI_X_Length')
-        roiX=epicsStore.value('ROI_X_Offset')
-        roiYN=epicsStore.value('ROI_Y_Length')
-        roiY=epicsStore.value('ROI_Y_Offset')
-            
-    if roiX==None:           #Try old values      
-        roiX=epicsStore.value('OTRS:DMP1:695:MinX')
-        roiY=epicsStore.value('OTRS:DMP1:695:MinY')
-        roiXN=epicsStore.value('OTRS:DMP1:695:SizeX')
-        roiYN=epicsStore.value('OTRS:DMP1:695:SizeY')
-                       
-    if roiX==None: #Some hardcoded values        
-        warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
-        ok=0
-        roiXN=1024                                 
-        roiX=0
-        roiYN=1024
-        roiY=0
+        if ROI_XTCAV.valid: 
+            break
 
-    x=roiX+np.arange(0, roiXN)
-    y=roiY+np.arange(0, roiYN)
-        
-    ROI={
-        'x' :x,                 #X vector
-        'y' :y,                 #Y vector
-        'x0' :roiX,             #Position of the first pixel in x
-        'y0' :roiY,             #Position of the first pixel in y
-        'xN' :roiXN,            #Size of the image in X
-        'yN' :roiYN};           #Size of the image in Y 
-    return ROI,ok
+    return ROI_XTCAV, t
     
 def ShotToShotParameters(ebeam,gasdetector):
     """
