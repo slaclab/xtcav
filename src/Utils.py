@@ -14,6 +14,8 @@ import math
 #Mihir Added Line Below
 import cv2
 
+from Metrics import *
+
 
 def ProcessXTCAVImage(image,ROI):
     """
@@ -31,7 +33,7 @@ def ProcessXTCAVImage(image,ROI):
     #For the image for each bunch we retrieve the statistics and add them to the list    
     imageStats=[];    
     for i in range(0,nb):
-        imageStats.append(GetImageStatistics(image[i,:,:],ROI['x'],ROI['y']))
+        imageStats.append(GetImageStatistics(image[i,:,:],ROI.x,ROI.y))
         
     return imageStats
     
@@ -120,10 +122,10 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
     """
 
     #This only contemplates the case when the ROI of the darkbackground is larger than the ROI of the image. Other cases should be contemplated in the future
-    minX=ROI['x0']-ROI_db['x0'];
-    maxX=(ROI['x0']+ROI['xN']-1)-ROI_db['x0'];
-    minY=ROI['y0']-ROI_db['y0'];
-    maxY=(ROI['y0']+ROI['yN']-1)-ROI_db['y0'];    
+    minX = ROI.x0 - ROI_db.x0
+    maxX=(ROI.x0+ROI.xN-1)-ROI_db.x0
+    minY=ROI.y0-ROI_db.y0
+    maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0    
     image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
        
     return image,ROI
@@ -216,14 +218,12 @@ def FindROI(image,ROI,threshold,expandfactor):
     cropped[:,:]=image[ind1Y:ind2Y,ind1X:ind2X]
                 
     #Output ROI in terms of the input ROI            
-    outROI={
-        'x0':ROI['x0']+ind1X,
-        'y0':ROI['y0']+ind1Y,
-        'xN':ind2X-ind1X+1,
-        'yN':ind2Y-ind1Y+1,
-        'x':ROI['x0']+np.arange(ind1X, ind2X),
-        'y':ROI['y0']+np.arange(ind1Y, ind2Y)
-        }
+    outROI = ROIMetrics(ind2X-ind1X+1, 
+        ROI.x0+ind1X, 
+        ind2Y-ind1Y+1, 
+        ROI.y0+ind1Y, 
+        x=ROI.x0+np.arange(ind1X, ind2X), 
+        y=ROI.y0+np.arange(ind1Y, ind2Y))
     
     return cropped,outROI
 
@@ -593,12 +593,12 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
     """
     ok=1
  
-    umperpix=globalCalibration['umperpix']
-    dumpe=globalCalibration['dumpe']
-    dumpdisp=globalCalibration['dumpdisp']    
-    rfampcalib=globalCalibration['rfampcalib']
-    rfphasecalib=globalCalibration['rfphasecalib']    
-    strstrength=globalCalibration['strstrength']
+    umperpix=globalCalibration.umperpix
+    dumpe=globalCalibration.dumpe
+    dumpdisp=globalCalibration.dumpdisp  
+    rfampcalib=globalCalibration.rfampcalib
+    rfphasecalib=globalCalibration.rfphasecalib  
+    strstrength=globalCalibration.strstrength
     
     rfamp=shotToShot['xtcavrfamp']
     rfphase=shotToShot['xtcavrfphase']
@@ -618,8 +618,8 @@ def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
 
     xfsPerPix = signflip*xfsPerPix;    
     
-    xfs=xfsPerPix*(ROI['x']-center[0])                  #x axis in fs around the center of mass
-    yMeV=yMeVPerPix*(ROI['y']-center[1])                #y axis in MeV around the center of mass
+    xfs=xfsPerPix*(ROI.x-center[0])                  #x axis in fs around the center of mass
+    yMeV=yMeVPerPix*(ROI.y-center[1])                #y axis in MeV around the center of mass
            
     
     physicalUnits={                                     #Structure with the physical units

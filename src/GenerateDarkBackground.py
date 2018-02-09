@@ -44,7 +44,6 @@ def generateDarkBackground(
     
     #Loading the dataset from the "dark" run, this way of working should be compatible with both xtc and hdf5 files
     dataSource=psana.DataSource("exp=%s:run=%s:idx" % (experiment, run_number))
-    print "here"
     
     #Camera and type for the xtcav images
     xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
@@ -56,9 +55,8 @@ def generateDarkBackground(
     n=0  #Counter for the total number of xtcav images processed 
     run = dataSource.runs().next()        
     
-
     ROI_XTCAV, last_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
-    accumulator_xtcav=np.zeros((ROI_XTCAV.YN, ROI_XTCAV.XN), dtype=np.float64)
+    accumulator_xtcav=np.zeros((ROI_XTCAV.yN, ROI_XTCAV.xN), dtype=np.float64)
 
     times = run.times()
     for t in range(last_image,-1,-1): #Starting from the last valid image, to avoid waits in the cases where there are not xtcav images for the first shots

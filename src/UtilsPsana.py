@@ -1,31 +1,28 @@
 import numpy as np
 import psana
 import warnings
-from ROIMetrics import *
+from Metrics import *
 
-def GetGlobalCalibValue(epicsStore,names,ok):
-    """
-    Iterate through list of names to try to get calibration value
-    Arguments:
-      names: list of string-names
-    Output:
-      value of epics variable and flag: 1 if found, 0 if not found.
-      if not found a default value of 0 is returned for the epics variable.
-    """
-    for n in names:
-        val = epicsStore.value(n)
-        if val is not None: return val
-    warnings.warn_explicit('No XTCAV Calibration for epics variable'+name[0],UserWarning,'XTCAV',0)
-    ok[0]=0 # notify caller that no value was found for a variable
-    return 0
+def GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=None):
+    analysis_version = psana.Detector('XTCAV_Analysis_Version')
+    times = run.times()
 
-def GetCameraSaturationValue(epicsStore):
-    if epicsStore.value('XTCAV_Analysis_Version') is not None:
-        return (1<<12)-1
-    else:
-        return (1<<14)-1
+    if not start in range(-1, len(times)):
+        start = len(times) - 1
 
-def GetGlobalXTCAVCalibration(epicsStore):
+    for t in range(start,-1,-1):
+        evt=run.event(times[t])
+        img = xtcav_camera.image(evt)
+        # skip if empty image
+        if img is None: 
+            continue
+
+        if analysis_version(evt) is not None:
+            return (1<<12)-1
+        else:
+            return (1<<14)-1
+
+def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
     """
     Obtain the global XTCAV calibration form the epicsStore
     Arguments:
@@ -34,37 +31,49 @@ def GetGlobalXTCAVCalibration(epicsStore):
       globalCalibration: struct with the parameters
       ok: if all the data was retrieved correctly
     """
-    
-
-    ok = [1]
-    umperpix=GetGlobalCalibValue(epicsStore,['XTCAV_calib_umPerPx','OTRS:DMP1:695:RESOLUTION'],ok)
-    strstrength=GetGlobalCalibValue(epicsStore,['XTCAV_strength_par_S','Streak_Strength','OTRS:DMP1:695:TCAL_X'],ok)
-    rfampcalib=GetGlobalCalibValue(epicsStore,['XTCAV_Amp_Des_calib_MV','XTCAV_Cal_Amp','SIOC:SYS0:ML01:AO214'],ok)
-    rfphasecalib=GetGlobalCalibValue(epicsStore,['XTCAV_Phas_Des_calib_deg','XTCAV_Cal_Phase','SIOC:SYS0:ML01:AO215'],ok)
-    dumpe=GetGlobalCalibValue(epicsStore,['XTCAV_Beam_energy_dump_GeV','Dump_Energy','REFS:DMP1:400:EDES'],ok)
-    dumpdisp=GetGlobalCalibValue(epicsStore,['XTCAV_calib_disp_posToEnergy','Dump_Disp','SIOC:SYS0:ML01:AO216'],ok)
-
-    globalCalibration={
-        'umperpix':umperpix, #Pixel size of the XTCAV camera
-        'strstrength':strstrength,  #Strength parameter
-        'rfampcalib':rfampcalib,    #Calibration of the RF amplitude
-        'rfphasecalib':rfphasecalib,    #Calibration of the RF phase
-        'dumpe':dumpe,                  #Beam energy: dump config
-        'dumpdisp':dumpdisp             #Vertical position to energy: dispersion
-        }
-                
-                
-    return globalCalibration,ok[0]
-          
-
-def GetXTCAVImageROI(epicsStore, run, xtcav_camera):
-    roiXN=psana.Detector('XTCAV_ROI_sizeX')# epicsStore.value('XTCAV_ROI_sizeX')
-    roiX=psana.Detector('XTCAV_ROI_startX')#epicsStore.value('XTCAV_ROI_startX')
-    roiYN=psana.Detector('XTCAV_ROI_sizeY')#epicsStore.value('XTCAV_ROI_sizeY')
-    roiY=psana.Detector('XTCAV_ROI_startY')#epicsStore.value('XTCAV_ROI_startY')
+    umperpix=psana.Detector('XTCAV_calib_umPerPx')
+    strstrength=psana.Detector('XTCAV_strength_par_S')
+    rfampcalib=psana.Detector('XTCAV_Amp_Des_calib_MV')
+    rfphasecalib=psana.Detector('XTCAV_Phas_Des_calib_deg')
+    dumpe=psana.Detector('XTCAV_Beam_energy_dump_GeV')
+    dumpdisp=psana.Detector('XTCAV_calib_disp_posToEnergy')
     times = run.times()
 
-    for t in range(len(times)-1,-1,-1):
+    if not start in range(-1, len(times)):
+        start = len(times) - 1
+
+    for t in range(start,-1,-1):
+        evt=run.event(times[t])
+        img = xtcav_camera.image(evt)
+        # skip if empty image
+        if img is None: 
+            continue
+       
+        globalCalibration = GlobalCalibration(
+            umperpix=umperpix(evt), 
+            strstrength=strstrength(evt), 
+            rfampcalib=rfampcalib(evt), 
+            rfphasecalib=rfphasecalib(evt), 
+            dumpe=dumpe(evt), 
+            dumpdisp=dumpdisp(evt) 
+        ) 
+        if globalCalibration.valid:
+            return globalCalibration, t
+                
+    return globalCalibration, -1
+          
+
+def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
+    roiXN=psana.Detector('XTCAV_ROI_sizeX')
+    roiX=psana.Detector('XTCAV_ROI_startX')
+    roiYN=psana.Detector('XTCAV_ROI_sizeY')
+    roiY=psana.Detector('XTCAV_ROI_startY')
+    times = run.times()
+
+    if not start in range(-1, len(times)):
+        start = len(times) - 1
+
+    for t in range(start,-1,-1):
         evt=run.event(times[t])
         img = xtcav_camera.image(evt)
         # skip if empty image
@@ -79,9 +88,9 @@ def GetXTCAVImageROI(epicsStore, run, xtcav_camera):
         ) 
 
         if ROI_XTCAV.valid: 
-            break
+            return ROI_XTCAV, t
 
-    return ROI_XTCAV, t
+    return ROI_XTCAV, -1
     
 def ShotToShotParameters(ebeam,gasdetector):
     """

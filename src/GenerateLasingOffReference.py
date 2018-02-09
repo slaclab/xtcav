@@ -64,12 +64,6 @@ def generateLasingOffReference(
     warnings.filterwarnings('always',module='Utils',category=UserWarning)
     warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
 
-    #Some default values for the options
-    
-    ROI_XTCAV = None
-    global_calibration = None
-    dark_background = None
-    
     print 'Lasing off reference'
     print '\t Experiment: %s' % experiment
     print '\t Runs: %s' % run_number
@@ -80,11 +74,8 @@ def generateLasingOffReference(
     #Loading the data, this way of working should be compatible with both xtc and hdf5 files
     dataSource=psana.DataSource("exp=%s:run=%s:idx" % (experiment, run_number))
 
-    #Camera and type for the xtcav images
-    xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
-    #xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
-    #xtcav_camera.set_do_offset(do_offset=False)
-    xtcav_type=psana.Camera.FrameV1
+    #Camera for the xtcav images
+    xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
 
     #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
     ebeam_data = psana.Detector('EBeam')
@@ -102,131 +93,113 @@ def generateLasingOffReference(
     listShotToShot=[];
     listROI=[];
     listPU=[]
-
         
-    run=dataSource.runs().next(); #This line and the previous line are a temporal hack to go only through the first run, that avoids an unexpected block when calling next at the iterator, when there are not remaining runs.
+    run=dataSource.runs().next()
+
+    ROI_XTCAV, last_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
+    global_calibration, last_image = xtup.GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=last_image)
+    saturation_value = xtup.GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=last_image)
+    if not darkreferencepath:
+        cp = CalibrationPaths(dataSource.env(), calpath)
+        darkreferencepath = cp.findCalFileName('pedestals', int(run_number))
+        
+    if not darkreferencepath:
+        print ('Dark reference for run %s not found, image will not be background substracted' % run_number)
+        loadeddarkreference=False 
+        dark_background = False
+    else:
+        dark_background = DarkBackground.Load(darkreferencepath)
+
     num_processed = 0 #Counter for the total number of xtcav images processed within the run        
     times = run.times()
 
     #  Parallel Processing implementation by andr0s and polo5
     #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
     #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
-    num_shots = len(times) #  The number of shots in this run
-    image_numbers = xtup.DivideImageTasks(num_shots, rank, size)
+    image_numbers = xtup.DivideImageTasks(last_image + 1, rank, size)
     current_shot = 0
 
     for t in image_numbers[::-1]: #  Starting from the back, to avoid waits in the cases where there are not xtcav images for the first shots
         evt=run.event(times[int(t)])
 
-        #ignore shots without xtcav, because we can get
-        #incorrect EPICS information (e.g. ROI).  this is
-        #a workaround for the fact that xtcav only records
-        #epics on shots where it has camera data, as well
-        #as an incorrect design in psana where epics information
-        #is not stored per-shot (it is in a more global object
+        #ignore shots without xtcav, because we can get incorrect EPICS information (e.g. ROI).  this is
+        #a workaround for the fact that xtcav only records epics on shots where it has camera data, as well
+        #as an incorrect design in psana where epics information is not stored per-shot (it is in a more global object
         #called "Env")
-        frame = evt.get(xtcav_type, xtcav_camera) 
-        if frame is None: 
+        img = xtcav_camera.image(evt)
+        # skip if empty image
+        if img is None: 
             continue
 
         ebeam = ebeam_data.get(evt)
         gasdetector = gasdetector_data.get(evt)
 
-        if not ROI_XTCAV: 
-            roi, ok = xtup.GetXTCAVImageROI(epicsStore) 
-            if not ok: #If the information is not good, we try next event
-                continue
-            ROI_XTCAV = roi
+        if np.max(img)>=saturation_value : #Detection if the image is saturated, we skip if it is
+            warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
+            continue
 
-        if not global_calibration:
-            gl_cal, ok = xtup.GetGlobalXTCAVCalibration(epicsStore)
-            if not ok: #If the information is not good, we try next event
-                continue
-            global_calibration = gl_cal
-            saturationValue = xtup.GetCameraSaturationValue(epicsStore)
+        shotToShot,ok = xtup.ShotToShotParameters(ebeam, gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        if not ok: #If the information is not good, we skip the event
+            continue
 
-        #If we have not loaded the dark background information yet, we do
-        if dark_background is None:
-            if not darkreferencepath:
-                cp = CalibrationPaths(dataSource.env(), calpath)
-                darkreferencepath = cp.findCalFileName('pedestals',evt.run())
-                
-            if not darkreferencepath:
-                print ('Dark reference for run %d not found, image will not be background substracted' % evt.run())
-                loadeddarkreference=False 
-                dark_background = False
-            else:
-                dark_background = DarkBackground.Load(darkreferencepath)       
-                      
-        if frame: #For each shot that contains an xtcav frame we retrieve it        
-            img=frame.data16().astype(np.float64)
+        event_id = evt.get(psana.EventId)
+        time = event_id.time()
+        sec  = time[0]
+        nsec = time[1]
+        shotToShot['unixtime'] = int((sec<<32)|nsec)
+        shotToShot['fiducial'] = event_id.fiducials()
+        
+        #Subtract the dark background, taking into account properly possible different ROIs, if it is available
+        if dark_background:        
+            img, ROI=xtu.SubtractBackground(img, ROI_XTCAV, dark_background.image, dark_background.ROI) 
+        else:
+            ROI = ROI_XTCAV
+        img, ok=xtu.DenoiseImage(img, medianfilter, snrfilter)                    #Remove noise from the image and normalize it
+        if not ok:                                        #If there is nothing in the image we skip the event  
+            continue
 
-            if np.max(img)>=saturationValue : #Detection if the image is saturated, we skip if it is
-                warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
-                continue
+        img, ROI=xtu.FindROI(img, ROI, roiwaistthres, roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        if ROI.xN < 3 or ROI.yN < 3:
+            print 'ROI too small',ROI.xN,ROI.yN
+            continue
 
-            shotToShot,ok = xtup.ShotToShotParameters(ebeam, gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
-            if not ok: #If the information is not good, we skip the event
-                continue
+        img = xtu.SplitImage(img, nb, islandsplitmethod, islandsplitpar1, islandsplitpar2)#new
 
-            id = evt.get(psana.EventId)
-            time = id.time()
-            sec  = time[0]
-            nsec = time[1]
-            shotToShot['unixtime'] = int((sec<<32)|nsec)
-            shotToShot['fiducial'] = id.fiducials()
-            
-            #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-            if dark_background:        
-                img, ROI=xtu.SubtractBackground(img, ROI_XTCAV, dark_background.image, dark_background.ROI) 
-            else:
-                ROI = ROI_XTCAV
-            img, ok=xtu.DenoiseImage(img, medianfilter, snrfilter)                    #Remove noise from the image and normalize it
-            if not ok:                                        #If there is nothing in the image we skip the event  
-                continue
+        if nb!=img.shape[0]:
+            continue
+        imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
 
-            img, ROI=xtu.FindROI(img, ROI, roiwaistthres, roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-            if ROI['xN']<3 or ROI['yN']<3:
-                print 'ROI too small',ROI['xN'],ROI['yN']
-                continue
+        PU, ok = xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,global_calibration)   
+        if not ok:
+            continue
 
-            img = xtu.SplitImage(img, nb, islandsplitmethod, islandsplitpar1, islandsplitpar2)#new
+        #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
+        if PU['xfsPerPix']<0:
+            PU['xfs']=PU['xfs'][::-1]
+            NB=len(imageStats)
+            for j in range(NB):
+                imageStats[j]['xProfile']=imageStats[j]['xProfile'][::-1]
+                imageStats[j]['yCOMslice']=imageStats[j]['yCOMslice'][::-1]
+                imageStats[j]['yRMSslice']=imageStats[j]['yRMSslice'][::-1]                                               
+                                                                                                                                                                                
+        listImageStats.append(imageStats)
+        listShotToShot.append(shotToShot)
+        listROI.append(ROI)
+        listPU.append(PU)
+        
+        n += 1
+        num_processed += 1
+        # print core numb and percentage
 
-            if nb!=img.shape[0]:
-                continue
-            imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
-
-            PU, ok = xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,global_calibration)   
-            if not ok:
-                continue
-
-            #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
-            if PU['xfsPerPix']<0:
-                PU['xfs']=PU['xfs'][::-1]
-                NB=len(imageStats)
-                for j in range(NB):
-                    imageStats[j]['xProfile']=imageStats[j]['xProfile'][::-1]
-                    imageStats[j]['yCOMslice']=imageStats[j]['yCOMslice'][::-1]
-                    imageStats[j]['yRMSslice']=imageStats[j]['yRMSslice'][::-1]                                               
-                                                                                                                                                                                    
-            listImageStats.append(imageStats)
-            listShotToShot.append(shotToShot)
-            listROI.append(ROI)
-            listPU.append(PU)
-            
-            n += 1
-            num_processed += 1
-            # print core numb and percentage
-
-            if current_shot % 5 == 0:
-                if size==1:extrainfo='\r'
-                else:extrainfo='\nCore %d: '%(rank + 1)
-                sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(current_shot) / np.ceil(maxshots/float(size)) *100, current_shot, np.ceil(maxshots/float(size))))
-                sys.stdout.flush()
-            current_shot += 1
-            if current_shot >= np.ceil(maxshots/float(size)):
-                sys.stdout.write('\n')
-                break
+        if current_shot % 5 == 0:
+            if size==1:extrainfo='\r'
+            else:extrainfo='\nCore %d: '%(rank + 1)
+            sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(current_shot) / np.ceil(maxshots/float(size)) *100, current_shot, np.ceil(maxshots/float(size))))
+            sys.stdout.flush()
+        current_shot += 1
+        if current_shot >= np.ceil(maxshots/float(size)):
+            sys.stdout.write('\n')
+            break
 
     #  here gather all shots in one core, add all lists
     exp = {'listImageStats': listImageStats, 'listShotToShot': listShotToShot, 'listROI': listROI, 'listPU': listPU}
@@ -261,7 +234,7 @@ def generateLasingOffReference(
 
     lor=LasingOffReference()
     lor.averagedProfiles=averagedProfiles
-    lor.runs=runs
+    lor.run=run_number
     lor.n=n
     
     # n should be consistent with len(final list)
@@ -277,7 +250,7 @@ def generateLasingOffReference(
         'roiexpand':roiexpand,
         'islandsplitmethod':islandsplitmethod,
         'islandsplitpar1':islandsplitpar1,
-        'islandsplitpar2':slandsplitpar2,
+        'islandsplitpar2':islandsplitpar2,
     }
     
     
