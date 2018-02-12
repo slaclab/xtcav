@@ -11,8 +11,8 @@ import getopt
 import warnings
 import Utils as xtu
 import UtilsPsana as xtup
+import Constants
 from DarkBackground import *
-from LasingOffReference import *
 from CalibrationPaths import *
 from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
@@ -64,7 +64,7 @@ class LasingOffReference(object):
             islandsplitpar2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
             calpath=''):
 
-        self.parameters = Parameters(experiment = experiment,
+        self.parameters = LasingOffParameters(experiment = experiment,
             maxshots = maxshots, run = run_number, validityrange = validityrange, 
             darkreferencepath = darkreferencepath, nb=nb, groupsize=groupsize, 
             medianfilter=medianfilter, snrfilter=snrfilter, roiwaistthres=roiwaistthres,
@@ -89,13 +89,13 @@ class LasingOffReference(object):
         dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
 
         #Camera for the xtcav images
-        xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
+        xtcav_camera = psana.Detector(Constants.SRC)
 
-        #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
-        ebeam_data = psana.Detector('EBeam')
+        #Ebeam type
+        ebeam_data = psana.Detector(Constants.EBEAM)
 
         #Gas detectors for the pulse energies
-        gasdetector_data = psana.Detector('FEEGasDetEnergy')
+        gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
 
         #Stores for environment variables   
         epicsStore = dataSource.env().epicsStore()
@@ -112,17 +112,7 @@ class LasingOffReference(object):
         global_calibration, last_image = xtup.GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=last_image)
         saturation_value = xtup.GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=last_image)
 
-        if not self.parameters.darkreferencepath:
-            cp = CalibrationPaths(dataSource.env(), self.parameters.calpath)
-            darkreferencepath = cp.findCalFileName('pedestals', int(self.parameters.run))
-            self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
-        
-        if not self.parameters.darkreferencepath:
-            print ('Dark reference for run %s not found, image will not be background substracted' % self.parameters.run)
-            dark_background = None
-        else:
-            dark_background = DarkBackground.Load(self.parameters.darkreferencepath)
-
+        dark_background = self.getDarkBackground(dataSource.env())
 
         num_processed = 0 #Counter for the total number of xtcav images processed within the run        
         times = run.times()
@@ -245,6 +235,18 @@ class LasingOffReference(object):
             self.Save(file)
 
         
+    def getDarkBackground(self, env):
+        if not self.parameters.darkreferencepath:
+            cp = CalibrationPaths(env, self.parameters.calpath)
+            darkreferencepath = cp.findCalFileName('pedestals', int(self.parameters.run))
+            if not darkreferencepath:
+                print ('Dark reference for run %s not found, image will not be background substracted' % self.parameters.run)
+                return None
+
+            self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
+
+        return DarkBackground.Load(self.parameters.darkreferencepath)
+
     def Save(self,path):
         # super hacky... allows us to save without overwriting current instance
         instance = copy.deepcopy(self)

@@ -13,7 +13,7 @@ from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
 from DarkBackground import *
 from CalibrationPaths import *
-
+import Constants
 from Metrics import *
   
 """
@@ -62,7 +62,7 @@ class DarkBackground(object):
         dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
         
         #Camera and type for the xtcav images
-        xtcav_camera = psana.Detector('XrayTransportDiagnostic.0:Opal1000.0')
+        xtcav_camera = psana.Detector(Constants.SRC)
         
         #Stores for environment variables    
         configStore=dataSource.env().configStore()
@@ -104,6 +104,7 @@ class DarkBackground(object):
             self.parameters = self.parameters._replace(validityrange=[self.parameters.run, 'end'])
         
         cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
+        ### what is pedestals?
         file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
         
         if savetofile:

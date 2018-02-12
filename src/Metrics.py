@@ -1,4 +1,5 @@
 import collections
+import Constants
 
 """
     Wrappers for metrics for XTCAV analysis. 
@@ -45,7 +46,12 @@ ShotToShotParameters = namedtuple_with_defaults('ShotToShotParameters',
     'xrayenergy',         #Xrays energy in J
     'unixtime',
     'fiducial',
-    'valid']
+    'valid'],
+    {'ebeamcharge': Constants.E_BEAM_CHARGE,
+    'dumpecharge': Constants.DUMP_E_CHARGE,
+    'xtcavrfphase': Constants.XTCAV_RFPHASE,
+    'xtcavrfamp': Constants.XTCAV_RFAMP,
+    'valid': 1}
     )
 
 

@@ -2,6 +2,7 @@ import numpy as np
 import psana
 import warnings
 from Metrics import *
+import Constants
 
 def GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=None):
     analysis_version = psana.Detector('XTCAV_Analysis_Version')
@@ -57,12 +58,10 @@ def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
             dumpe=dumpe(evt), 
             dumpdisp=dumpdisp(evt)
         )
-        valid = 1
         for k,v in global_calibration._asdict().iteritems():
             if not v:
-                warnings.warn_explicit('No XTCAV Calibration for epics variable' + k,UserWarning,'XTCAV',0)
-                valid = 0
-        global_calibration._replace(valid=valid)
+                warnings.warn_explicit('No XTCAV Calibration for epics variable' + k, UserWarning,'XTCAV',0)
+                global_calibration = global_calibration._replace(valid=0)
 
         if global_calibration.valid:
             return global_calibration, t
@@ -113,46 +112,35 @@ def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
     return ROI_XTCAV, -1
 
 def GetShotToShotParameters(ebeam, gasdetector, evt_id):
-    ### move to constants file
-    echarge=1.60217657e-19
-
-    #Some default values
-    ### move to constants file
-    ebeamcharge=5
-    xtcavrfamp=20
-    xtcavrfphase=90
-    energydetector=0.2
-    dumpecharge=175e-12 #In C
-    energydetector=0.2
-    valid = 1
-
-    if ebeam:    
-        ebeamcharge=ebeam.ebeamCharge()
-        xtcavrfamp=ebeam.ebeamXTCAVAmpl()
-        xtcavrfphase=ebeam.ebeamXTCAVPhase()
-        dumpecharge=ebeam.ebeamDumpCharge()*echarge #In C        
-    else:    
-        warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
-        valid=0
-        
-    if gasdetector:
-        energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2    
-    else:   #Some hardcoded values
-        warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
-        valid=0     
-
-    xrayenergy=1e-3*energydetector #In J
-
     time = evt_id.time()
     sec  = time[0]
     nsec = time[1]
     unixtime = int((sec<<32)|nsec)
     fiducial = evt_id.fiducials()
+ 
+    shot_to_shot = ShotToShotParameters(unixtime = unixtime, fiducial = fiducial)
 
-    return ShotToShotParameters(
-        ebeamcharge, dumpecharge, xtcavrfamp, 
-        xtcavrfphase, xrayenergy,
-        unixtime, fiducial, valid)
+    if ebeam:    
+        ebeamcharge=ebeam.ebeamCharge()
+        xtcavrfamp=ebeam.ebeamXTCAVAmpl()
+        xtcavrfphase=ebeam.ebeamXTCAVPhase()
+        dumpecharge=ebeam.ebeamDumpCharge()*Constants.E_CHARGE #In C  
+        shot_to_shot = shot_to_shot._replace(ebeamcharge = ebeamcharge, 
+            xtcavrfphase = xtcavrfphase, xtcavrfamp = xtcavrfamp, dumpecharge = dumpecharge)      
+    else:    
+        warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
+        shot_to_shot = shot_to_shot._replace(valid = 0)
+        
+    if gasdetector:
+        energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2    
+    else:   #Some hardcoded values
+        energydetector = Constants.ENERGY_DETECTOR
+        warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
+        shot_to_shot = shot_to_shot._replace(valid = 0) 
+
+    shot_to_shot = shot_to_shot._replace(xrayenergy = 1e-3*energydetector)
+
+    return shot_to_shot
 
 def DivideImageTasks(num_shots, rank, size):
     tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:

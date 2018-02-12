@@ -1,6 +1,5 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 #Functions related with the XTCAV pulse retrieval
-
 import numpy as np
 #
 import scipy.interpolate
@@ -11,6 +10,7 @@ import scipy.ndimage as im
 import scipy.io
 import math
 import cv2
+import Constants
 
 from Metrics import *
 
@@ -249,8 +249,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     t=nolasingAveragedProfiles['t']   #Master time obtained from the no lasing references
     dt=(t[-1]-t[0])/(t.size-1)
     
-    eCharge=1.60217657e-19          #Electron charge in coulombs
-    Nelectrons=shotToShot.dumpecharge/eCharge;   #Total number of electrons in the bunch    
+    Nelectrons=shotToShot.dumpecharge/Constants.E_CHARGE;   #Total number of electrons in the bunch    
     
     #Create the the arrays for the outputs, first index is always bunch number
     bunchdelay=np.zeros(NB, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
@@ -338,7 +337,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
         
         
         #First calculation of the power based on center of masses and dispersion for each bunch
-        powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*eCharge*1e6)*eCurrent    #In J/s
+        powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6)*eCurrent    #In J/s
         powerERMS[j,:]=(lasingERMS[j,:]**2-nolasingERMS[j,:]**2)*(eCurrent**(2.0/3.0)) #
         
     powerrawECOM=powerECOM*1e-9 
@@ -350,7 +349,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(NB):                 
-        powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*eCharge*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
+        powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
         powerERMS[j,:]=shotToShot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
         eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*1e-15*1e9
@@ -416,10 +415,9 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
             
     #Obtain the number of electrons in each shot
     ### move to constants
-    eCharge=1.60217657e-19          #Electron charge in coulombs
     Nelectrons=np.zeros(N, dtype=np.float64);
     for i in range(N): 
-        Nelectrons[i]=listShotToShot[i].dumpecharge/eCharge
+        Nelectrons[i]=listShotToShot[i].dumpecharge/Constants.E_CHARGE
             
     #To be safe with the master time, we set it to have a step half the minumum step
     dt=mindt/2
