@@ -71,9 +71,13 @@ PhysicalUnits = namedtuple_with_defaults('PhysicalUnits',
     'valid'])
 
 
-Parameters = namedtuple_with_defaults('Parameters', 
+LasingOffParameters = namedtuple_with_defaults('LasingOffParameters', 
     ['experiment', 'maxshots', 'run', 'validityrange', 
     'darkreferencepath', 'nb', 'groupsize', 'medianfilter', 
     'snrfilter', 'roiwaistthres', 'roiexpand', 'islandsplitmethod',
     'islandsplitpar1', 'islandsplitpar2', 'calpath', 'version'])
+
+
+DarkBackgroundParameters = namedtuple_with_defaults('DarkBackgroundParameters', 
+    ['experiment', 'maxshots', 'run', 'validityrange', 'calibrationpath'])
 
