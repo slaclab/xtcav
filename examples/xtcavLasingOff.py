@@ -1,10 +1,11 @@
-from xtcav.GenerateLasingOffReference import *
+from xtcav.LasingOffReference import *
 
-GLOC=generateLasingOffReference(
+GLOC=LasingOffReference(
 	experiment='amox23616',
 	run_number='131',
 	maxshots=401,
 	nb=1,
 	groupsize=5,
 	validityrange=(86,91) )
+GLOC.Generate()
 

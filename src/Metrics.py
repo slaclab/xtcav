@@ -1,58 +1,79 @@
-import numpy as np
-import warnings
+import collections
 
-class ROIMetrics(object):
-    
+"""
+    Wrappers for metrics for XTCAV analysis. 
+    Most perform checks to make sure information is valid. Using 1/0 to denote
+    validity since h5py does not support boolean values (at least that's how it appears..)
+    """
+def namedtuple_with_defaults(typename, field_names, default_values=()):
+    T = collections.namedtuple(typename, field_names)
+    T.__new__.__defaults__ = (None,) * len(T._fields)
+    if isinstance(default_values, collections.Mapping):
+        prototype = T(**default_values)
+    else:
+        prototype = T(*default_values)
+    T.__new__.__defaults__ = tuple(prototype)
+    return T
 
-    def __init__(self, roiXN, roiX, roiYN, roiY, x=None, y=None):
-        # Don't allow None arguments in class
-        self.xN = roiXN  #Size of the image in X                           
-        self.x0 = roiX    #Position of the first pixel in x
-        self.yN = roiYN  #Size of the image in Y 
-        self.y0 = roiY    #Position of the first pixel in y
-        
-        self.valid = True
-        if roiX is None:       
-            warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
-            self.valid = False
-            self.xN = 1024   #Size of the image in X                           
-            self.x0 = 0         #Position of the first pixel in x
-            self.yN = 1024   #Size of the image in Y 
-            self.y0 = 0         #Position of the first pixel in y
 
-        self.x = x if x is not None else roiX+np.arange(0, roiXN) #X vector
-        self.y = y if y is not None else roiY+np.arange(0, roiYN) #Y vector
-        
-        
+ROIMetrics = namedtuple_with_defaults('ROIMetrics', 
+    ['xN', #Size of the image in X   
+    'x0',  #Position of the first pixel in x
+    'yN',  #Size of the image in Y 
+    'y0',  #Position of the first pixel in y
+    'x',   #X vector
+    'y',   #Y vector
+    'valid'])
 
-    def Save(self,path):        
-        constSave(vars(self),path)
 
-    @staticmethod    
-    def Load(path):        
-        return constLoad(path)
+GlobalCalibration = namedtuple_with_defaults('GlobalCalibration', 
+    ['umperpix', #Pixel size of the XTCAV camera
+    'strstrength', #Strength parameter
+    'rfampcalib', #Calibration of the RF amplitude
+    'rfphasecalib', #Calibration of the RF phase
+    'dumpe',        #Beam energy: dump config
+    'dumpdisp',
+    'valid'
+    ], {'valid': 1})
 
-class GlobalCalibration(object):
-    
+      
+ShotToShotParameters = namedtuple_with_defaults('ShotToShotParameters',
+    ['ebeamcharge',  #ebeamcharge
+    'dumpecharge',  #dumpecharge in C
+    'xtcavrfamp',   #RF amplitude
+    'xtcavrfphase', #RF phase
+    'xrayenergy',         #Xrays energy in J
+    'unixtime',
+    'fiducial',
+    'valid']
+    )
 
-    def __init__(self, umperpix=None, strstrength=None, rfampcalib=None, rfphasecalib=None, dumpe=None, dumpdisp=None):
-        self.umperpix=umperpix #Pixel size of the XTCAV camera
-        self.strstrength=strstrength  #Strength parameter
-        self.rfampcalib=rfampcalib    #Calibration of the RF amplitude
-        self.rfphasecalib=rfphasecalib    #Calibration of the RF phase
-        self.dumpe=dumpe                 #Beam energy: dump config
-        self.dumpdisp=dumpdisp    
 
-        self.valid = True
-        for key, value in vars(self).iteritems():
-            if value is None:
-                warnings.warn_explicit('No XTCAV Calibration for epics variable' + key,UserWarning,'XTCAV',0)
-                self.valid = False
-        
+ImageStatistics = namedtuple_with_defaults('ImageStatistics', 
+    ['imfrac',
+    'xProfile',
+    'yProfile',
+    'xCOM',
+    'yCOM',
+    'xRMS',
+    'yRMS',
+    'xFWHM',
+    'yFWHM',
+    'yCOMslice',
+    'yRMSslice'])
 
-    def Save(self,path):        
-        constSave(vars(self),path)
 
-    @staticmethod    
-    def Load(path):        
-        return constLoad(path)
+PhysicalUnits = namedtuple_with_defaults('PhysicalUnits', 
+    ['xfs',
+    'yMeV',
+    'xfsPerPix',
+    'yMeVPerPix',
+    'valid'])
+
+
+Parameters = namedtuple_with_defaults('Parameters', 
+    ['experiment', 'maxshots', 'run', 'validityrange', 
+    'darkreferencepath', 'nb', 'groupsize', 'medianfilter', 
+    'snrfilter', 'roiwaistthres', 'roiexpand', 'islandsplitmethod',
+    'islandsplitpar1', 'islandsplitpar2', 'calpath', 'version'])
+

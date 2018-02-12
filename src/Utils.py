@@ -1,5 +1,4 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
-
 #Functions related with the XTCAV pulse retrieval
 
 import numpy as np
@@ -11,7 +10,6 @@ import warnings
 import scipy.ndimage as im 
 import scipy.io
 import math
-#Mihir Added Line Below
 import cv2
 
 from Metrics import *
@@ -26,17 +24,16 @@ def ProcessXTCAVImage(image,ROI):
     Output:
         imageStats: list with the image statistics for each bunch in the image
     """
-    
     #obtain the number of bunches for the image. In principle this should be equal to n    
-    nb=image.shape[0];
-        
+    nb=image.shape[0]
     #For the image for each bunch we retrieve the statistics and add them to the list    
-    imageStats=[];    
-    for i in range(0,nb):
+    imageStats=[]    
+    for i in range(nb):
         imageStats.append(GetImageStatistics(image[i,:,:],ROI.x,ROI.y))
         
     return imageStats
     
+
 def GetCenterOfMass(image,x,y):
     """
     Gets the center of mass of an image 
@@ -46,7 +43,6 @@ def GetCenterOfMass(image,x,y):
     Output:
       x0,y0 coordinates of the center of mass 
     """
-  
     profilex=np.sum(image,0);     
     x0=np.dot(profilex,np.transpose(x))/np.sum(profilex)
     profiley=np.sum(image,1);     
@@ -55,61 +51,7 @@ def GetCenterOfMass(image,x,y):
     return x0,y0
     
     
-def GetImageStatistics(image,x,y):
-    """
-    Obtain all the statistics (profiles, center of mass, etc) of an image
-    Arguments:
-      image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
-      x,y: vectors of the image
-    Output:
-      imageStats: struct that contains the different statistics, including the center of mass 
-    """
-
-    imFrac=np.sum(image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
-
-    xProfile=np.sum(image,0);                           #Profile projected onto the x axis
-    xCOM=np.dot(xProfile,np.transpose(x))/imFrac        #X position of the center of mass
-    xRMS= np.sqrt(np.dot((x-xCOM)**2,xProfile)/imFrac); #Standard deviation of the values in x
-    ind=np.where(xProfile >= np.amax(xProfile)/2)[0];   
-    xFWHM=np.abs(ind[-1]-ind[0]+1);                     #FWHM of the X profile
-            
-    yProfile=np.sum(image,1);                           #Profile projected onto the y axis
-    yCOM=np.dot(yProfile,y)/imFrac                      #Y position of the center of mass
-    yRMS= np.sqrt(np.dot((y-yCOM)**2,yProfile)/imFrac); #Standard deviation of the values in y
-    ind=np.where(yProfile >= np.amax(yProfile)/2);
-    yFWHM=np.abs(ind[-1]-ind[0]);                       #FWHM of the Y profile
-    
-    yCOMslice=divideNoWarn(np.dot(np.transpose(image),y),xProfile,yCOM);   #Y position of the center of mass for each slice in x
-    distances=np.outer(np.ones(yCOMslice.shape[0]),y)-np.outer(yCOMslice,np.ones(image.shape[0]))    #For each point of the image, the distance to the y center of mass of the corresponding slice
-    yRMSslice= divideNoWarn(np.sum(np.transpose(image)*((distances)**2),1),xProfile,0)         #Width of the distribution of the points for each slice around the y center of masses                  
-    yRMSslice = np.sqrt(yRMSslice)
-    
-    if imFrac==0:   #What to to if the image was effectively full of zeros
-        xCOM=(x[-1]+x[0])/2.0;
-        xRMS=0;
-        xFWHM=0;
-        yCOM=(y[-1]+y[0])/2.0;
-        yRMS=0;
-        yFWHM=0;
-        yCOMslice[np.isnan(yCOMslice)]=yCOM
-    
-    imageStats={
-        'imFrac':imFrac,
-        'xProfile':xProfile,
-        'xCOM':xCOM,
-        'xRMS':xRMS,
-        'xFWHM':xFWHM,
-        'yProfile':yProfile,
-        'yCOM':yCOM,
-        'yRMS':yRMS,
-        'yFWHM':yFWHM,
-        'yCOMslice':yCOMslice,
-        'yRMSslice':yRMSslice
-    }
-        
-    return imageStats
-    
-def SubtractBackground(image,ROI,image_db,ROI_db):
+def SubtractBackground(image, ROI, dark_background):
     """
     Obtain all the statistics (profiles, center of mass, etc) of an image
     Arguments:
@@ -122,11 +64,14 @@ def SubtractBackground(image,ROI,image_db,ROI_db):
     """
 
     #This only contemplates the case when the ROI of the darkbackground is larger than the ROI of the image. Other cases should be contemplated in the future
-    minX = ROI.x0 - ROI_db.x0
-    maxX=(ROI.x0+ROI.xN-1)-ROI_db.x0
-    minY=ROI.y0-ROI_db.y0
-    maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0    
-    image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
+    if dark_background:
+        image_db = dark_background.image
+        ROI_db = dark_background.ROI
+        minX = ROI.x0 - ROI_db.x0
+        maxX=(ROI.x0+ROI.xN-1)-ROI_db.x0
+        minY=ROI.y0-ROI_db.y0
+        maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0    
+        image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
        
     return image,ROI
 
@@ -142,10 +87,10 @@ def DenoiseImage(image,medianfilter,snrfilter):
       image: filtered image
       ok: true if there is something in the image
     """
-
+    ### move to constants
     SNR_border=100 #number of pixels near the border that can be considered to contain just noise
 
-    ok=1
+    contains_data=True
     #Applygin the median filter
     image=im.median_filter(image,medianfilter)
     
@@ -155,7 +100,7 @@ def DenoiseImage(image,medianfilter,snrfilter):
     
     if(np.sum(image)<=0):
         warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-        ok=0
+        contains_data=0
     
     #Subtracting the mean of the noise
     image=image-mean;
@@ -164,16 +109,16 @@ def DenoiseImage(image,medianfilter,snrfilter):
     thres=snrfilter*std;    
     image[image < thres ] = 0 
     #We also normalize the image to have a total area of one
-#    if(np.sum(image)>0):
- #       if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
-  #          warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-   #         ok=0
+    # if(np.sum(image)>0):
+    #     if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
+    #         warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
+    #         ok=0
     image=image/np.sum(image)
-    #else:
-     #   warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-      #  ok=0        
+    # else:
+    #     warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
+    #     ok=0        
     
-    return image,ok
+    return image, contains_data
 
 def FindROI(image,ROI,threshold,expandfactor):
     """
@@ -227,6 +172,63 @@ def FindROI(image,ROI,threshold,expandfactor):
     
     return cropped,outROI
 
+
+def GetImageStatistics(image, x, y):
+    imFrac=np.sum(image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
+    xProfile=np.sum(image,0)  #Profile projected onto the x axis
+    yProfile=np.sum(image,1)  #Profile projected onto the y axis
+    
+    xCOM=np.dot(xProfile,np.transpose(x))/imFrac        #X position of the center of mass
+    xRMS= np.sqrt(np.dot((x-xCOM)**2,xProfile)/imFrac); #Standard deviation of the values in x
+    ind=np.where(xProfile >= np.amax(xProfile)/2)[0];   
+    xFWHM=np.abs(ind[-1]-ind[0]+1);                     #FWHM of the X profile
+
+    yCOM=np.dot(yProfile,y)/imFrac                      #Y position of the center of mass
+    yRMS= np.sqrt(np.dot((y-yCOM)**2,yProfile)/imFrac); #Standard deviation of the values in y
+    ind=np.where(yProfile >= np.amax(yProfile)/2);
+    yFWHM=np.abs(ind[-1]-ind[0]);                       #FWHM of the Y profile
+    
+    yCOMslice=divideNoWarn(np.dot(np.transpose(image),y),xProfile,yCOM);   #Y position of the center of mass for each slice in x
+    distances=np.outer(np.ones(yCOMslice.shape[0]),y)-np.outer(yCOMslice,np.ones(image.shape[0]))    #For each point of the image, the distance to the y center of mass of the corresponding slice
+    yRMSslice= divideNoWarn(np.sum(np.transpose(image)*((distances)**2),1),xProfile,0)         #Width of the distribution of the points for each slice around the y center of masses                  
+    yRMSslice = np.sqrt(yRMSslice)
+    
+    if imFrac==0:   #What to to if the image was effectively full of zeros
+        xCOM=float(x[-1]+x[0])/2
+        xRMS=0
+        xFWHM=0
+        yCOM=float(y[-1]+y[0])/2
+        yRMS=0
+        yFWHM=0
+        yCOMslice[np.isnan(yCOMslice)]=yCOM
+
+    return ImageStatistics(imFrac, xProfile, yProfile, xCOM,
+        yCOM, xRMS, yRMS, xFWHM, yFWHM, yCOMslice, yRMSslice)
+
+
+def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
+    valid=1
+    yMeVPerPix = global_calibration.umperpix*global_calibration.dumpe/global_calibration.dumpdisp*1e-3          #Spacing of the y axis in MeV
+    
+    xfsPerPix = -global_calibration.umperpix*global_calibration.rfampcalib/(0.3*global_calibration.strstrength*shot_to_shot.xtcavrfamp)     #Spacing of the x axis in fs (this can be negative)
+    
+    cosphasediff=math.cos((global_calibration.rfphasecalib-shot_to_shot.xtcavrfphase)*math.pi/180)
+
+    #If the cosine of phase was too close to 0, we return warning and error
+    if np.abs(cosphasediff)<0.5:
+        warnings.warn_explicit('The phase of the bunch with the RF field is far from 0 or 180 degrees',UserWarning,'XTCAV',0)
+        valid=0
+
+    signflip = np.sign(cosphasediff); #It may need to be flipped depending on the phase
+
+    xfsPerPix = signflip*xfsPerPix;    
+    
+    xfs=xfsPerPix*(ROI.x-center[0])                  #x axis in fs around the center of mass
+    yMeV=yMeVPerPix*(ROI.y-center[1])                #y axis in MeV around the center of mass
+
+    return PhysicalUnits(xfs, yMeV, xfsPerPix, yMeVPerPix, valid)
+
+
 def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     """
     Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
@@ -248,7 +250,7 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     dt=(t[-1]-t[0])/(t.size-1)
     
     eCharge=1.60217657e-19          #Electron charge in coulombs
-    Nelectrons=shotToShot['dumpecharge']/eCharge;   #Total number of electrons in the bunch    
+    Nelectrons=shotToShot.dumpecharge/eCharge;   #Total number of electrons in the bunch    
     
     #Create the the arrays for the outputs, first index is always bunch number
     bunchdelay=np.zeros(NB, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
@@ -342,14 +344,14 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shotToShot['xrayenergy']-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
+    eoffsetfactor=(shotToShot.xrayenergy-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
     escalefactor=np.sum(powerERMS)*dt*1e-15                 #in J
     
     
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(NB):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*eCharge*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
-        powerERMS[j,:]=shotToShot['xrayenergy']*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
+        powerERMS[j,:]=shotToShot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
         eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*1e-15*1e9
         eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*1e-15*1e9
@@ -408,15 +410,16 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
     #We find adequate values for the master time
     for i in range(N):
         #We compare and update the maximum, minimum and increment value for the master time vector
-        maxt=np.amax([maxt,np.amax(listPU[i]['xfs'])])
-        mint=np.amin([mint,np.amin(listPU[i]['xfs'])])
-        mindt=np.amin([mindt,np.abs(listPU[i]['xfsPerPix'])])
+        maxt=np.amax([maxt,np.amax(listPU[i].xfs)])
+        mint=np.amin([mint,np.amin(listPU[i].xfs)])
+        mindt=np.amin([mindt,np.abs(listPU[i].xfsPerPix)])
             
     #Obtain the number of electrons in each shot
+    ### move to constants
     eCharge=1.60217657e-19          #Electron charge in coulombs
     Nelectrons=np.zeros(N, dtype=np.float64);
     for i in range(N): 
-        Nelectrons[i]=listShotToShot[i]['dumpecharge']/eCharge
+        Nelectrons[i]=listShotToShot[i].dumpecharge/eCharge
             
     #To be safe with the master time, we set it to have a step half the minumum step
     dt=mindt/2
@@ -441,8 +444,8 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
         #Calculate interpolated profiles in time for comparison
         profilesT=np.zeros((N,len(t)), dtype=np.float64);
         for i in range(N): 
-            distT=(listImageStats[i][j]['xCOM']-listImageStats[i][0]['xCOM'])*listPU[i]['xfsPerPix']
-            profilesT[i,:]=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,listImageStats[i][j]['xProfile'],kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
+            distT=(listImageStats[i][j].xCOM-listImageStats[i][0].xCOM)*listPU[i].xfsPerPix
+            profilesT[i,:]=scipy.interpolate.interp1d(listPU[i].xfs-distT,listImageStats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
             
         #Decide of the groups based on correlation 
         group=np.zeros(N, dtype=np.int32);      #array that will indicate which group each profile sill correspond to
@@ -470,29 +473,29 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
             for i in range(N):    
                 if group[i]==g:             #We find the profiles that belong to that group and average them together
                 
-                    eventTime[j][g] = listShotToShot[i]['unixtime']
-                    eventFid[j][g] = listShotToShot[i]['fiducial']
-                    distT=(listImageStats[i][j]['xCOM']-listImageStats[i][0]['xCOM'])*listPU[i]['xfsPerPix'] #Distance in time converted form pixels to fs
-                    distE=(listImageStats[i][j]['yCOM']-listImageStats[i][0]['yCOM'])*listPU[i]['yMeVPerPix'] #Distance in time converted form pixels to MeV
+                    eventTime[j][g] = listShotToShot[i].unixtime
+                    eventFid[j][g] = listShotToShot[i].fiducial
+                    distT=(listImageStats[i][j].xCOM-listImageStats[i][0].xCOM)*listPU[i].xfsPerPix #Distance in time converted form pixels to fs
+                    distE=(listImageStats[i][j].yCOM-listImageStats[i][0].yCOM)*listPU[i].yMeVPerPix #Distance in time converted form pixels to MeV
                     averageDistT[j,g]=averageDistT[j,g]+distT       #Accumulate it in the right group
                     averageDistE[j,g]=averageDistE[j,g]+distE       #Accumulate it in the right group
                     
-                    averageTRMS[j,g]=averageTRMS[j,g]+listImageStats[i][j]['xRMS']*listPU[i]['xfsPerPix']   #Conversion to fs and accumulate it in the right group
-                    averageERMS[j,g]=averageTRMS[j,g]+listImageStats[i][j]['yRMS']*listPU[i]['yMeVPerPix']  #Conversion to MeV and accumulate it in the right group
+                    averageTRMS[j,g]=averageTRMS[j,g]+listImageStats[i][j].xRMS*listPU[i].xfsPerPix   #Conversion to fs and accumulate it in the right group
+                    averageERMS[j,g]=averageTRMS[j,g]+listImageStats[i][j].yRMS*listPU[i].yMeVPerPix  #Conversion to MeV and accumulate it in the right group
                                           
-                    dt_old=listPU[i]['xfs'][1]-listPU[i]['xfs'][0]; # dt before interpolation   
-                    eCurrent=listImageStats[i][j]['xProfile']/(dt_old*1e-15)*Nelectrons[i]                              #Electron current in electrons/s   
+                    dt_old=listPU[i].xfs[1]-listPU[i].xfs[0]; # dt before interpolation   
+                    eCurrent=listImageStats[i][j].xProfile/(dt_old*1e-15)*Nelectrons[i]                              #Electron current in electrons/s   
                     
-                    eCOMslice=(listImageStats[i][j]['yCOMslice']-listImageStats[i][j]['yCOM'])*listPU[i]['yMeVPerPix'] #Center of mass in energy for each t converted to the right units
-                    eRMSslice=listImageStats[i][j]['yRMSslice']*listPU[i]['yMeVPerPix']                                 #Energy dispersion for each t converted to the right units
+                    eCOMslice=(listImageStats[i][j].yCOMslice-listImageStats[i][j].yCOM)*listPU[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
+                    eRMSslice=listImageStats[i][j].yRMSslice*listPU[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
                         
-                    interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
+                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
                     averageECurrent[j,g,:]=averageECurrent[j,g,:]+interp(t);  #Accumulate it in the right group                    
                                                 
-                    interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
                     averageECOMslice[j,g,:]=averageECOMslice[j,g,:]+interp(t);          #Accumulate it in the right group
                     
-                    interp=scipy.interpolate.interp1d(listPU[i]['xfs']-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
                     averageERMSslice[j,g,:]=averageERMSslice[j,g,:]+interp(t);          #Accumulate it in the right group
                                   
 
@@ -523,117 +526,6 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
             
     return averagedProfiles
      
-#Obsolete     
-def SaveLasingData(path,listPulses,runs,n):
-    """
-    Saves the list of the retrieved pulses
-    Arguments:
-      path: full file path
-      listPulses: list of the retrieved pulses
-      runs: list if the runs used
-      n: total number of accumulated images
-    """
-    output = {}
-    output['lasing'] = {
-        'pulses':listPulses,
-        'runs':runs,
-        'n':n
-    }
-    scipy.io.savemat(path, output)
-
-#Obsolete 
-def DebugSaveSet(path,ROI,image,imageStats):
-    """
-    Saves an image with the retrieved statistics
-    Arguments:
-      path: full file path
-      ROI: ROI of the image
-      image: image to be saved
-      imageStatistics: statistics to be saved
-    """
-    output = {}
-    output['imageset'] = {
-        'ROI' : ROI,
-        'image':image,
-        'imageStats':imageStats,
-    }
-    
-    scipy.io.savemat(path, output)
-        
-#Obsolete         
-def SaveNoLasingData(path,averagedProfiles,runs,n):
-    """
-    Saves the non lasing references
-    Arguments:
-      path: full file path
-      averagedProfiles: groups of averaged profiles
-      runs: list if the runs used
-      n: total number of accumulated images
-    """
-    output = {}
-    output['nolasing'] = {
-        'averagedProfiles' : averagedProfiles,
-        'runs':runs,
-        'n':n
-    }
-
-    scipy.io.savemat(path, output)
-    
-def CalculatePhysicalUnits(ROI,center,shotToShot,globalCalibration):
-    """
-    Obtain the x axis and y axis in physical units (time and energy)
-    Arguments:
-      ROI: region of interes containing the x and y axis
-      center: coordinates of the center of mass, array with two elements, the first one for the x coordinate and the second one for the y coordinate
-      shottoShot: structure with the properties of the specific shot
-      globalCalibration: structure with the global calibration for the xtcav
-    Output:
-      physicalUnits: structure with the relevant physical units
-      ok: if all the data was retrieved correctly
-    """
-    ok=1
- 
-    umperpix=globalCalibration.umperpix
-    dumpe=globalCalibration.dumpe
-    dumpdisp=globalCalibration.dumpdisp  
-    rfampcalib=globalCalibration.rfampcalib
-    rfphasecalib=globalCalibration.rfphasecalib  
-    strstrength=globalCalibration.strstrength
-    
-    rfamp=shotToShot['xtcavrfamp']
-    rfphase=shotToShot['xtcavrfphase']
-
-    yMeVPerPix = umperpix*dumpe/dumpdisp*1e-3;          #Spacing of the y axis in MeV
-    
-    xfsPerPix = -umperpix*rfampcalib/(0.3*strstrength*rfamp);     #Spacing of the x axis in fs (this can be negative)
-    
-    cosphasediff=math.cos((rfphasecalib-rfphase)*math.pi/180)
-
-    #If the cosine of phase was too close to 0, we return warning and error
-    if np.abs(cosphasediff)<0.5:
-        warnings.warn_explicit('The phase of the bunch with the RF field is far from 0 or 180 degrees',UserWarning,'XTCAV',0)
-        ok=0
-
-    signflip = np.sign(cosphasediff); #It may need to be flipped depending on the phase
-
-    xfsPerPix = signflip*xfsPerPix;    
-    
-    xfs=xfsPerPix*(ROI.x-center[0])                  #x axis in fs around the center of mass
-    yMeV=yMeVPerPix*(ROI.y-center[1])                #y axis in MeV around the center of mass
-           
-    
-    physicalUnits={                                     #Structure with the physical units
-        'yMeVPerPix':yMeVPerPix,
-        'xfsPerPix':xfsPerPix,
-        'xfs':xfs,
-        'yMeV':yMeV
-        }
-           
-           
-    return physicalUnits,ok
-
-
-
 
 def SplitImage(image, n, islandsplitmethod,par1,par2):
     """
@@ -1137,3 +1029,4 @@ def divideNoWarn(numer,denom,default):
         ratio=numer/denom
         ratio[ ~ np.isfinite(ratio)]=default  # NaN/+inf/-inf 
     return ratio
+

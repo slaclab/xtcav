@@ -49,21 +49,29 @@ def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
         if img is None: 
             continue
        
-        globalCalibration = GlobalCalibration(
+        global_calibration = GlobalCalibration(
             umperpix=umperpix(evt), 
             strstrength=strstrength(evt), 
             rfampcalib=rfampcalib(evt), 
             rfphasecalib=rfphasecalib(evt), 
             dumpe=dumpe(evt), 
-            dumpdisp=dumpdisp(evt) 
-        ) 
-        if globalCalibration.valid:
-            return globalCalibration, t
+            dumpdisp=dumpdisp(evt)
+        )
+        valid = 1
+        for k,v in global_calibration._asdict().iteritems():
+            if not v:
+                warnings.warn_explicit('No XTCAV Calibration for epics variable' + k,UserWarning,'XTCAV',0)
+                valid = 0
+        global_calibration._replace(valid=valid)
+
+        if global_calibration.valid:
+            return global_calibration, t
                 
-    return globalCalibration, -1
+    return global_calibration, -1
           
 
 def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
+
     roiXN=psana.Detector('XTCAV_ROI_sizeX')
     roiX=psana.Detector('XTCAV_ROI_startX')
     roiYN=psana.Detector('XTCAV_ROI_sizeY')
@@ -79,64 +87,72 @@ def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
         # skip if empty image
         if img is None: 
             continue
-       
-        ROI_XTCAV = ROIMetrics(
-            roiXN(evt), 
-            roiX(evt), 
-            roiYN(evt), 
-            roiY(evt)
-        ) 
 
-        if ROI_XTCAV.valid: 
+        xN = roiXN(evt)  #Size of the image in X                           
+        x0 = roiX(evt)    #Position of the first pixel in x
+        yN = roiYN(evt)  #Size of the image in Y 
+        y0 = roiY(evt)    #Position of the first pixel in y
+        
+        valid = 1
+        if roiX is None:       
+            warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
+            valid = 0
+            xN = 1024   #Size of the image in X                           
+            x0 = 0         #Position of the first pixel in x
+            yN = 1024   #Size of the image in Y 
+            y0 = 0         #Position of the first pixel in y
+
+        x = x0+np.arange(0, xN) 
+        y = y0+np.arange(0, yN) 
+
+        ROI_XTCAV = ROIMetrics(xN, x0, yN, y0, x, y, valid) 
+
+        if valid: 
             return ROI_XTCAV, t
 
     return ROI_XTCAV, -1
-    
-def ShotToShotParameters(ebeam,gasdetector):
-    """
-    Obtain shot to shot parameters
-    Arguments:
-      ebeam: psana.Bld.BldDataEBeamV5
-      gasdetector: psana.Bld.BldDataFEEGasDetEnergy
-    Output:
-      ROI: struct with the ROI
-      ok: if all the data was retrieved correctly
-    """
-    ok=1
-    echarge=1.60217657e-19;
+
+def GetShotToShotParameters(ebeam, gasdetector, evt_id):
+    ### move to constants file
+    echarge=1.60217657e-19
+
+    #Some default values
+    ### move to constants file
+    ebeamcharge=5
+    xtcavrfamp=20
+    xtcavrfphase=90
+    energydetector=0.2
+    dumpecharge=175e-12 #In C
+    energydetector=0.2
+    valid = 1
 
     if ebeam:    
         ebeamcharge=ebeam.ebeamCharge()
         xtcavrfamp=ebeam.ebeamXTCAVAmpl()
         xtcavrfphase=ebeam.ebeamXTCAVPhase()
         dumpecharge=ebeam.ebeamDumpCharge()*echarge #In C        
-    else:    #Some hardcoded values
+    else:    
         warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
-        ok=0
-        ebeamcharge=5
-        xtcavrfamp=20
-        xtcavrfphase=90
-        energydetector=0.2;
-        dumpecharge=175e-12 #In C
+        valid=0
         
     if gasdetector:
         energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2    
     else:   #Some hardcoded values
         warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
-        ok=0
-        energydetector=0.2;
-        
-    energy=1e-3*energydetector #In J
-            
-    shotToShot={
-        'ebeamcharge':ebeamcharge,  #ebeamcharge
-        'dumpecharge':dumpecharge,  #dumpecharge in C
-        'xtcavrfamp': xtcavrfamp,   #RF amplitude
-        'xtcavrfphase':xtcavrfphase, #RF phase
-        'xrayenergy':energy         #Xrays energy in J
-        }        
-       
-    return shotToShot,ok 
+        valid=0     
+
+    xrayenergy=1e-3*energydetector #In J
+
+    time = evt_id.time()
+    sec  = time[0]
+    nsec = time[1]
+    unixtime = int((sec<<32)|nsec)
+    fiducial = evt_id.fiducials()
+
+    return ShotToShotParameters(
+        ebeamcharge, dumpecharge, xtcavrfamp, 
+        xtcavrfphase, xrayenergy,
+        unixtime, fiducial, valid)
 
 def DivideImageTasks(num_shots, rank, size):
     tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:

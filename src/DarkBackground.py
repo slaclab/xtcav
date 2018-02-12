@@ -13,11 +13,10 @@ class DarkBackground(object):
         self.n=0
         
     def Save(self,path): 
-        # super hacky... allows us to save 
+        # super hacky... allows us to save without overwriting current instance
         instance = copy.deepcopy(self)
         if instance.ROI:
             instance.ROI = vars(instance.ROI)
-            instance.ROI.pop('valid')
         constSave(instance,path)
         
     @staticmethod    
