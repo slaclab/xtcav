@@ -71,11 +71,11 @@ class DarkBackground(object):
         n=0  #Counter for the total number of xtcav images processed 
         run = dataSource.runs().next()        
         
-        ROI_XTCAV, last_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
+        ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
         accumulator_xtcav = np.zeros((ROI_XTCAV.yN, ROI_XTCAV.xN), dtype=np.float64)
 
         times = run.times()
-        for t in range(last_image,-1,-1): #Starting from the last valid image, to avoid waits in the cases where there are not xtcav images for the first shots
+        for t in range(first_image, len(times)):
             evt=run.event(times[t])
         
             #ignore shots without xtcav, because we can get incorrect EPICS information (e.g. ROI).  this is
@@ -91,7 +91,7 @@ class DarkBackground(object):
             n += 1
                 
             if n % 5 == 0:
-                sys.stdout.write('\r%.1f %% done, %d / %d' % ( float(n) / self.parameters.maxshots*100, n, self.parameters.maxshots ))
+                sys.stdout.write('\r%.1f %% done, %d / %d' % (float(n) / self.parameters.maxshots*100, n, self.parameters.maxshots ))
                 sys.stdout.flush()   
             if n >= self.parameters.maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
                 sys.stdout.write('\n')
@@ -102,12 +102,10 @@ class DarkBackground(object):
         
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=[self.parameters.run, 'end'])
-        
-        cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
-        ### what is pedestals?
-        file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
-        
+         
         if savetofile:
+            cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
+            file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.Save(file)
 
     def Save(self,path): 
@@ -115,11 +113,12 @@ class DarkBackground(object):
         instance = copy.deepcopy(self)
         if instance.ROI:
             instance.ROI = dict(vars(instance.ROI))
-            instance.parameters = dict(instance.parameters._asdict())
+            instance.parameters = dict(vars(instance.parameters))
         constSave(instance,path)
         
     @staticmethod    
     def Load(path):        
         db = constLoad(path)
-        db.ROI = ROIMetrics(db.ROI['xN'], db.ROI['x0'], db.ROI['yN'], db.ROI['y0'], x=db.ROI['x'], y=db.ROI['y'])
+        db.ROI = ROIMetrics(**db.ROI)
+        db.parameters = DarkBackgroundParameters(**db.parameters)
         return db

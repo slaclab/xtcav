@@ -5,7 +5,6 @@ GLOC=LasingOffReference(
 	run_number='131',
 	maxshots=401,
 	nb=1,
-	groupsize=5,
-	validityrange=(86,91) )
+	groupsize=5 )
 GLOC.Generate()
 
