@@ -14,9 +14,12 @@ import math
 import warnings
 import Utils as xtu
 import UtilsPsana as xtup
+import SplittingUtils as su
+import Constants
 from DarkBackground import *
 from LasingOffReference import *
 from CalibrationPaths import *
+from Metrics import *
 
 
 class ShotToShotCharacterization(object):
@@ -32,141 +35,198 @@ class ShotToShotCharacterization(object):
         islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
     """
 
-    def __init__(self):
+    def __init__(self, 
+        experiment='',
+        runs='',
+        num_bunches = 1,
+        maxshots=float('+inf'),
+        start_image=0,
+        medianfilter = 3,
+        snrfilter = 10,
+        roiwaistthres = 0.2,
+        roiexpand = 2.5,
+        islandsplitmethod='scipylabel',
+        islandsplitpar1=3.0,
+        islandsplitpar2=5.0,
+        darkreferencepath=None,
+        lasingoffreferencepath=None,
+        calpath=''
+        ):
             
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
         
-        #Some default values for the options
-        self._experiment='amoc8114'     #Experiment label
-        self._darkreferencepath=[];         #Dark reference information
-        self._lasingoffreferencepath=[];         #Dark reference information
-        self._darkreference=[]
-        self._lasingoffreference=[]
-        self._nb=float('nan')                    #Number of bunches
-        self._medianfilter=float('nan')          #Number of neighbours for median filter
-        self._snrfilter=float('nan')             #Number of sigmas for the noise threshold
-        self._roiwaistthres=float('nan')         #Parameter for the roi location
-        self._roiexpand=float('nan')             #Parameter for the roi location
-        self._islandsplitmethod=''               #Method for island splitting
-        self._islandsplitpar1=float('nan')
-        self._islandsplitpar2=float('nan')
-        self._currentevent=[]
-        self._eventresultsstep1=[]
-        self._eventresultsstep2=[]
-        self._eventresultsstep3=[]
-        self._env=[]
-        self._globalcalibration=[]
-        self._roixtcav=[]
-        self._calpath=''
+        self.experiment = experiment                #Experiment label
+        self.runs = runs                            #Run numbers
+        self.num_bunches = num_bunches              #Number of bunches
+        self.maxshots = maxshots
+        self.start_image = start_image
+        self.medianfilter = medianfilter            #Number of neighbours for median filter
+        self.snrfilter = snrfilter                  #Number of sigmas for the noise threshold
+        self.roiwaistthres = roiwaistthres          #Parameter for the roi location
+        self.roiexpand = roiexpand                  #Parameter for the roi location
+        self.islandsplitmethod = islandsplitmethod  #Method for island splitting
+        self.islandsplitpar1 = islandsplitpar1
+        self.islandsplitpar2 = islandsplitpar2
         
-        #Different flags
-        self._loadeddarkreference=False
-        self._loadedlasingoffreference=False
-        self._currenteventavailable=False
-        self._currenteventprocessedstep1=False   #Step one is pure processing of the trace, without lasing off referencing
-        self._currenteventprocessedstep2=False   #Step two is calculating physical units
-        self._currenteventprocessedstep3=False   #Step three is the processing of the profiles with respect to the reference
-        self._envinfo=False      
+        self.darkreferencepath = darkreferencepath  #Dark reference file path
+        self.lasingoffreferencepath = lasingoffreferencepath        #Lasing off reference file path 
+        self.calpath = calpath
+        
+        self._envset = False
+        if experiment and runs:
+            self.SetDataSource()
 
-        #Camera and type for the xtcav images
-        self.xtcav_camera = psana.Source('DetInfo(XrayTransportDiagnostic.0:Opal1000.0)')
-        self.xtcav_type=psana.Camera.FrameV1
-        self._rawimage=[]
-        
-        #Ebeam type: it should actually be the version 5 which is the one that contains xtcav stuff
-        self.ebeam_data=psana.Source('BldInfo(EBeam)')
-        self._ebeam=[]
+        self.LoadDarkReference()
+        self.LoadLasingOffReference()
 
-        #Gas detectors for the pulse energies
-        self.gasdetector_data=psana.Source('BldInfo(FEEGasDetEnergy)')
-        self._gasdetector=[]
-        
+
+    def SetExperiment(self, experiment, runs):
+        self.experiment = experiment
+        self.runs = runs
+        self.SetDataSource()
+
+            
+    def SetDataSource(self, datasource=None):
+        if not datasource:
+            datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
+        self._datasource = datasource
+        self.SetEnvironment()
+
+
+    def SetEnvironment(self):
+        self._env = self._datasource.env()
+        self._epicsstore = self._env.epicsStore()
+        self._xtcav_camera = psana.Detector(Constants.SRC)
+        self._ebeam_data = psana.Detector(Constants.EBEAM)
+        self._gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
+        self._ebeam = None
+        self._gasdetector = None
+
+        self._currentrun = self._datasource.runs().next()
+
+        self._roixtcav, first_image = xtup.GetXTCAVImageROI(self._epicsstore, self._currentrun, self._xtcav_camera, start = self.start_image)
+        self._global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(self._epicsstore, self._currentrun, self._xtcav_camera, start=first_image)
+        self._saturation_value, self.start_image = xtup.GetCameraSaturationValue(self._epicsstore, self._currentrun, self._xtcav_camera, start=first_image)
+
+        self._envset = True
+
+
     def LoadDarkReference(self):
         """
         Method that loads the dark reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
         
         Returns: True if successful, False otherwise        
         """
-        if not self._darkreferencepath:
-            cp=CalibrationPaths(self._env,self._calpath)       
-            self._darkreferencepath=cp.findCalFileName('pedestals',self._currentevent.run())
-            
-        #If we could not find it, we just wont use it, and return False
-        if not self._darkreferencepath:
-            warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
-            self._loadeddarkreference=False      
-            return False
+        self._darkreference = None
+
+        if not self.darkreferencepath:
+            if not self._envset:
+                warnings.warn_explicit('Dark reference not loaded. Must set datasource or supply darkreferencepath','XTCAV',0)
+                return 
+
+            cp=CalibrationPaths(self._env, self.calpath)       
+            self.darkreferencepath=cp.findCalFileName('pedestals', self._currentrun)
+            #If we could not find it, we just wont use it, and return False
+            if not self.darkreferencepath:
+                warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
+                return    
         
-        self._darkreference=DarkBackground.Load(self._darkreferencepath)
-        self._loadeddarkreference=True
-        
-        return True
-        
+        self._darkreference = DarkBackground.Load(self.darkreferencepath)
+
+                
     def LoadLasingOffReference(self):
         """
         Method that loads the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
-        
         Returns: True if successful, False otherwise        
         """
-        if not self._lasingoffreferencepath:
-            cp=CalibrationPaths(self._env,self._calpath)     
-            self._lasingoffreferencepath=cp.findCalFileName('lasingoffreference',self._currentevent.run())
+        self._lasingoffreference = None
+
+        if not self.lasingoffreferencepath:
+            if not self._envset:
+                warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath','XTCAV',0)
+                return 
+            cp=CalibrationPaths(self._env,self.calpath)     
+            self.lasingoffreferencepath = cp.findCalFileName('lasingoffreference',  self._currentrun)
             
-        #If we could not find it, we load default parameters, and return False
-        if not self._lasingoffreferencepath:
-            warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
-            self.LoadDefaultProcessingParameters()            
-            self._loadedlasingoffreference=False
-            return False
-        self._lasingoffreference=LasingOffReference.Load(self._lasingoffreferencepath)
-        self._loadedlasingoffreference=True      
-        #Only use the parameters if they have not been manually set, except for the number of bunches. That one is mandatory.
-        self._nb=self._lasingoffreference.parameters['nb']
-        if math.isnan(self._medianfilter):
-            self._medianfilter=self._lasingoffreference.parameters['medianfilter']
-        if math.isnan(self._snrfilter):
-            self._snrfilter=self._lasingoffreference.parameters['snrfilter']
-        if math.isnan(self._roiwaistthres):
-            self._roiwaistthres=self._lasingoffreference.parameters['roiwaistthres']
-        if math.isnan(self._roiexpand):
-            self._roiexpand=self._lasingoffreference.parameters['roiexpand']
-        if not self._darkreferencepath:
-            self._darkreferencepath=self._lasingoffreference.parameters['darkreferencepath']
-        if not self._islandsplitmethod:
-            self._islandsplitmethod=self._lasingoffreference.parameters.get('islandsplitmethod',self._lasingoffreference.parameters.get('islandSplitMethod','scipylabel'))#to account for the change name that the variable name suffered at some point, and make it compatible with older lasing off reference files            
-        if math.isnan(self._islandsplitpar1):        
-            self._islandsplitpar1=self._lasingoffreference.parameters.get('islandsplitpar1',self._lasingoffreference.parameters.get('par1',3.))          
-        if math.isnan(self._islandsplitpar2):        
-            self._islandsplitpar2=self._lasingoffreference.parameters.get('islandsplitpar2',self._lasingoffreference.parameters.get('par2',5.))               
-        return True
+            #If we could not find it, we load default parameters, and return False
+            if not self.lasingoffreferencepath:
+                warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
+                self.LoadDefaultProcessingParameters()            
+                return
+
+        self._lasingoffreference = LasingOffReference.Load(self.lasingoffreferencepath)
+        self.LoadLasingOffReferenceParameters()
+
             
     def LoadDefaultProcessingParameters(self):
         """
         Method that sets some standard processing parameters in case they have not been explicitly set by the user and could not been retrieved from the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.             
         """
-        if math.isnan(self._nb):
-            self._nb=1
-        if math.isnan(self._medianfilter):
-            self._medianfilter=3
-        if math.isnan(self._snrfilter):
-            self._snrfilter=10
-        if math.isnan(self._roiwaistthres):
-            self._roiwaistthres=0.2
-        if math.isnan(self._roiexpand):
-            self._roiexpand=2.5    
-        if not self._islandsplitmethod:
-            self._islandsplitmethod='scipylabel'       
-        if math.isnan(self._islandsplitpar1):        
-            self._islandsplitpar1=3.0
-        if math.isnan(self._islandsplitpar2):        
-            self._islandsplitpar2=5.0
-                           
-    def SetCurrentEvent(self,evt):
-        """
-        Method that sets a psana event to be the current event. Only after setting an event it is possible to query for results such as X-Ray power, or pulse delay. On the other hand, the calculations to get the reconstruction will not be done until the information itself is requested, so the call to this method should be quite fast.
+        if not self.num_bunches:
+            self.num_bunches=1
+        if not self.medianfilter:
+            self.medianfilter=3
+        if not self.snrfilter:
+            self.snrfilter=10
+        if not self.roiwaistthres:
+            self.roiwaistthres=0.2
+        if not self.roiexpand:
+            self.roiexpand=2.5    
+        if not self.islandsplitmethod:
+            self.islandsplitmethod='scipylabel'       
+        if not self.islandsplitpar1:        
+            self.islandsplitpar1=3.0
+        if not self.islandsplitpar2:        
+            self.islandsplitpar2=5.0
 
+
+    def LoadLasingOffReferenceParameters(self):
+        #Only use the parameters if they have not been manually set, except for the number of bunches. That one is mandatory.
+        if self.num_bunches and self.num_bunches != self._lasingoffreference.parameters.num_bunches:
+            warnings.warn_explicit('Number of bunches input (%d) differs from number of bunches found in lasing off reference (%d). Overwriting input value.' % (self.num_bunches,self._lasingoffreference.parameters.num_bunches) ,UserWarning,'XTCAV',0)
+            self.num_bunches=self._lasingoffreference.parameters.num_bunches
+        if not self.medianfilter:
+            self.medianfilter=self._lasingoffreference.parameters.medianfilter
+        if not self.snrfilter:
+            self.snrfilter=self._lasingoffreference.parameterssnrfilter
+        if not self.roiwaistthres:
+            self.roiwaistthres=self._lasingoffreference.parameters.roiwaistthres
+        if not self.roiexpand:
+            self.roiexpand=self._lasingoffreference.parameters.roiexpand
+        if not self.darkreferencepath:
+            self.darkreferencepath=self._lasingoffreference.parameters.darkreferencepath
+        if not self.islandsplitmethod:
+            self.islandsplitmethod=self._lasingoffreference.parameters.islandsplitmethod
+        if not self.islandsplitpar1:        
+            self.islandsplitpar1=self._lasingoffreference.parameters.islandsplitpar1
+        if not self.islandsplitpar2:        
+            self.islandsplitpar2=self._lasingoffreference.parameters.islandsplitpar2 
+
+
+    def processRuns(self):
+
+        if not self._envset:
+            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
+            return
+
+        for r,run in enumerate(self._datasource.runs()):
+            n_r=0  #Counter for the total number of xtcav images processed within the run       
+            times = run.times()
+            ### parallelize?
+            for t in times:
+                if n_r >= self.maxshots:
+                    return
+                evt = run.event(t)
+                success = self.processEvent(evt)
+                if success:
+                    n_r += 1
+                    
+
+                           
+    def processEvent(self,evt):
+        """
         Args:
             evt (psana event): relevant event to retrieve information form
             
@@ -174,184 +234,90 @@ class ShotToShotCharacterization(object):
             True: All the input form detectors necessary for a good reconstruction are present in the event. 
             False: The information from some detectors is missing for that event. It may still be possible to get information.
         """
-        ebeam = evt.get(psana.Bld.BldDataEBeamV7,self.ebeam_data)   
-        if not ebeam:
-            ebeam = evt.get(psana.Bld.BldDataEBeamV6,self.ebeam_data)  
-        if not ebeam:
-            ebeam = evt.get(psana.Bld.BldDataEBeamV5,self.ebeam_data)  
-        gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergy,self.gasdetector_data) 
-        if not gasdetector:
-            gasdetector=evt.get(psana.Bld.BldDataFEEGasDetEnergyV1,self.gasdetector_data) 
-        frame = evt.get(self.xtcav_type, self.xtcav_camera) 
-        
-        self._currenteventprocessedstep1=False
-        self._currenteventprocessedstep2=False
-        self._currenteventprocessedstep3=False
-        self._eventresultsstep1=[]
-        self._eventresultsstep2=[]
-        self._eventresultsstep3=[]
+        ### check if 'runs' is equivalent to calibration params?
+        if not self._envset:
+            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
+            return 
 
+        img = self._xtcav_camera.image(evt)
 
-        # If there is not frame, there is nothing we can do
-        if (not frame):
-            self._currenteventavailable=False     
-            return False            
-        
-        self._rawimage=frame.data16().astype(np.float64)  
-        self._currentevent=evt          
-        self._ebeam=ebeam
-        self._gasdetector=gasdetector        
-        self._currenteventavailable=True
-        # If gas detector or ebeam info is missing, we sill still may be able to do some stuff, but still return False
-        if (ebeam and gasdetector):                               
-            return True
-        else:
+        if img is None: 
+            return 
+
+        self._rawimage = img
+        self._currentevent = evt
+        #Reset image results
+        self._pulse_characterization = None
+        self._image_profile = None
+        self._processed_image = None
+
+        self._ebeam = self._ebeam_data.get(evt)
+        self._gasdetector = self._gasdetector_data.get(evt)  
+
+        self.setImageProfile()
+        if not self._image_profile:
             return False
-        
-    def SetDataSource(self,datasource):
-        self.SetEnv(datasource.env())
-    def SetEnv(self,env):
-        """
-        After creating an instance of the ShotToShotCharacterization class, it is necessary to pass the env object for that data that is being analysed.
 
-        Args:
-            env (Env object): Env object that is going to be used for the analysis.
-            
-        """
-        self._env=env
-        self._envinfo=False    
-        
-    def ProcessShotStep1(self):
+        if not self._lasingoffreference:
+            warnings.warn_explicit('Cannot perform analysis without lasing off reference',UserWarning,'XTCAV',0)
+            return False
+
+        #Using all the available data, perform the retrieval for that given shot        
+        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averagedProfiles) 
+        return True if self._pulse_characterization else False
+
+    def setImageProfile(self):
         """
         Method that runs the first step of the reconstruction, which consists of getting statistics from the XTCAV trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
 
         Returns: True if it was successful, False otherwise
         """
+        if np.max(self._rawimage)>=self._saturation_value : #Detection if the image is saturated, we skip if it is
+            warnings.warn_explicit('Saturated Image. Skipping...',UserWarning,'XTCAV',0)
+            return
 
-        if not self._currenteventavailable:
-            return False
-  
-        #It is important that this is open first so the experiment name is set properly (important for loading references)   
-        if not self._envinfo:
-            self._experiment=self._env.experiment()
-            epicsstore=self._env.epicsStore();
-            self._globalCalibration,ok1=xtup.GetGlobalXTCAVCalibration(epicsstore)
-            self._saturationValue = xtup.GetCameraSaturationValue(epicsstore)
-            self._roixtcav,ok2=xtup.GetXTCAVImageROI(epicsstore) 
-            if ok1 and ok2: #If the information is not good, we try next event
-                self._envinfo=True
-            else:
-                return False
-
-        #It is important that the lasing off reference is open first, because it may reset the lasing off reference that needs to be loaded        
-        if not self._loadedlasingoffreference:
-            self.LoadLasingOffReference()
-        
-        if not self._loadeddarkreference:
-            self.LoadDarkReference()
-
-        if np.max(self._rawimage)>=self._saturationValue : #Detection if the image is saturated, we skip if it is
-            warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
-                                    
+        shot_to_shot = xtup.GetShotToShotParameters(self._ebeam, self._gasdetector, self._currentevent.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        if not shot_to_shot.valid: #If the information is not good, we skip the event
+            return                              
         #Subtract the dark background, taking into account properly possible different ROIs
         #Only if the reference is present
-        if self._loadeddarkreference:        
-            img,ROI=xtu.SubtractBackground(self._rawimage,self._roixtcav,self._darkreference.image,self._darkreference.ROI)  
+        if self._darkreference:        
+            img, ROI = xtu.SubtractBackground(self._rawimage, self._roixtcav, self._darkreference)  
         else:
-            ROI=self._roixtcav
-            img=self._rawimage
+            ROI = self._roixtcav
+            img = self._rawimage
             
-        img,ok=xtu.DenoiseImage(img,self._medianfilter,self._snrfilter)                    #Remove noise from the image and normalize it
-        if not ok:                                        #If there is nothing in the image we skip the event  
-            return False
+        img, contains_data = xtu.DenoiseImage(img, self.medianfilter, self.snrfilter)                    #Remove noise from the image and normalize it
+        if not contains_data:                                        #If there is nothing in the image we skip the event  
+            return 
 
-        img,ROI=xtu.FindROI(img,ROI,self._roiwaistthres,self._roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if ROI['xN']<3 or ROI['yN']<3:
-            print 'ROI too small',ROI['xN'],ROI['yN']
-            return False
-        img=xtu.SplitImage(img,self._nb, self._islandsplitmethod,self._islandsplitpar1,self._islandsplitpar2)
+        img, ROI = xtu.FindROI(img, ROI, self.roiwaistthres, self.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        if ROI.xN < Constants.MIN_ROI_SIZE or ROI.yN < Constants.MIN_ROI_SIZE:
+            print 'ROI too small',ROI.xN,ROI.yN
+            return 
 
-         
+        processed_image = su.SplitImage(img, self.num_bunches, self.islandsplitmethod, self.islandsplitpar1, self.islandsplitpar2)
 
-        imageStats=xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace        
+        image_stats = xtu.ProcessXTCAVImage(processed_image, ROI)          #Obtain the different properties and profiles from the trace        
         
-        #Save the results of the step 1
-        
-        self._eventresultsstep1={
-            'processedImage':img,
-            'NB':img.shape[0],
-            'ROI':ROI,
-            'imageStats':imageStats,
-            }
-        
-        self._currenteventprocessedstep1=True        
-        return True
-        
-    def ProcessShotStep2(self):
-        """
-        Method that runs the second step of the reconstruction, which consists of converting from pixel units into time and energy units for the trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
-
-        Returns: True if it was successful, False otherwise
-        """
-
-        if not self._currenteventprocessedstep1:
-            if not self.ProcessShotStep1():
-                return False
-
-        shotToShot,ok = xtup.ShotToShotParameters(self._ebeam,self._gasdetector) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
-        if not ok: #If the information is not good, we skip the event
-            return False
-                   
-        imageStats=self._eventresultsstep1['imageStats'];
-        ROI=self._eventresultsstep1['ROI']
-                  
-        PU, ok=xtu.CalculatePhysicalUnits(ROI,[imageStats[0]['xCOM'],imageStats[0]['yCOM']],shotToShot,self._globalCalibration) #Obtain the physical units for the axis x and y, in fs and MeV
-        if not ok: #If the information is not good, we skip the event
-            return False
+        physical_units = xtu.CalculatePhyscialUnits(ROI,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, self._global_calibration)   
+        if not physical_units.valid:
+            return 
 
         #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles     
-        if PU['xfsPerPix']<0:
-            PU['xfs']=PU['xfs'][::-1]
-            for j in range(self._eventresultsstep1['NB']):
-                imageStats[j]['xProfile']=imageStats[j]['xProfile'][::-1]
-                imageStats[j]['yCOMslice']=imageStats[j]['yCOMslice'][::-1]
-                imageStats[j]['yRMSslice']=imageStats[j]['yRMSslice'][::-1]
+        if physical_units.xfsPerPix < 0:
+            physical_units = physical_units._replace(xfs = physical_units.xfs[::-1])
+            for j in range(self._num_bunches):
+                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1])
+                image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
+                image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
                 
         #Save the results of the step 2
-        
-        self._eventresultsstep2={
-            'PU':PU,
-            'imageStats':imageStats,
-            'shotToShot':shotToShot
-            }
-        
-        self._currenteventprocessedstep2=True
-        return True       
-    
-    def ProcessShotStep3(self):
-        """
-        Method that runs the third step of the reconstruction, which consists of comparing the profiles to the reference profiles to obtain the X-Ray power. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
+        self._image_profile = ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
+        self._processed_image = processed_image
 
-        Returns: True if it was successful, False otherwise
-        """
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return False
         
-        #There is no possible step 3 if there is not lasing off reference
-        if not self._loadedlasingoffreference:
-            return False
-
-        #If the nubmer of bunches in the reference is not equal to the number of found bunches, we cannot reconstruct
-        if self._eventresultsstep1['NB']!=self._nb:
-            return False
-        
-        #Using all the available data, perform the retrieval for that given shot        
-        self._eventresultsstep3=xtu.ProcessLasingSingleShot(self._eventresultsstep2['PU'],self._eventresultsstep2['imageStats'],self._eventresultsstep2['shotToShot'],self._lasingoffreference.averagedProfiles) 
-        self._currenteventprocessedstep3=True  
-        return True            
-        
-    def GetPhysicalUnitsResults(self):
+    def GetPhysicalUnits(self):
         """
         Method which returns a dictionary based list with the physical units for the cropped image
 
@@ -364,11 +330,11 @@ class ShotToShotCharacterization(object):
             out2: True if the retrieval was successful, False otherwise. 
         """
     
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return None,False
+        if not self._image_profile:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image',UserWarning,'XTCAV',0)
+            return None
         
-        return self._eventresultsstep2['PU'],True                
+        return self._image_profile.physical_units               
         
     def GetFullResults(self):
         """
@@ -393,14 +359,13 @@ class ShotToShotCharacterization(object):
                 'nolasingECOM':                 No lasing energy center of masses for each time in MeV
                 'lasingERMS':                   Lasing energy dispersion for each time in MeV
                 'nolasingERMS':                 No lasing energy dispersion for each time in MeV
-                'NB':                           Number of bunches
+                'num_bunches':                           Number of bunches
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return [],False
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image',UserWarning,'XTCAV',0)
             
-        return self._eventresultsstep3 ,True        
+        return self._pulse_characterization       
             
     def PulseDelay(self,method='RMSCOM'):    
         """
@@ -411,34 +376,37 @@ class ShotToShotCharacterization(object):
             out1: List of the delays for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return [],False
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
+                'Cannot construct pulse delay',UserWarning,'XTCAV',0)
+            return None
             
-        if (self._eventresultsstep1['NB']<1):
-            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        num_bunches = self._pulse_characterization.num_bunches
+        if num_bunches < 1:
+            return np.zeros((num_bunches), dtype=np.float64)
         
                   
-        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
-        for j in range(0,self._eventresultsstep1['NB']):
-            t=self._eventresultsstep3['t']+self._eventresultsstep3['bunchdelay'][j]
-            if method=='RMS':
-                power=self._eventresultsstep3['powerERMS'][j]
+        peakpos=np.zeros((num_bunches), dtype=np.float64);
+        for j in range(num_bunches):
+            t = self._pulse_characterization.t + self._pulse_characterization.bunchdelay[j]
+            if method == 'RMS':
+                power = self._pulse_characterization.powerERMS[j]
             elif method=='COM':
-                power=self._eventresultsstep3['powerECOM'][j]
+                power = self._pulse_characterization.powerECOM[j]
             elif method=='RMSCOM':
-                power=(self._eventresultsstep3['powerECOM'][j]+self._eventresultsstep3['powerERMS'][j])/2
+                power = (self._pulse_characterization.powerECOM[j] + self._pulse_characterization.powerERMS[j])/2
             else:
-                return [],False        
+                warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
+                return None      
             #quadratic fit around 5 pixels method
             central=np.argmax(power)
             try:
                 fit=np.polyfit(t[central-2:central+3],power[central-2:central+3],2)
                 peakpos[j]=-fit[1]/(2*fit[0])
             except:
-                return [],False  
+                return None 
             
-        return peakpos,True
+        return peakpos
             
     def PulseFWHM(self,method='RMSCOM'):    
         """
@@ -449,32 +417,35 @@ class ShotToShotCharacterization(object):
             out1: List of the full widths half maximum for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return [],False
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
+                'Cannot construct pulse FWHM',UserWarning,'XTCAV',0)
+            return None
             
-        if (self._eventresultsstep1['NB']<1):
-            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        num_bunches = self._pulse_characterization.num_bunches
+        if num_bunches < 1:
+            return np.zeros((num_bunches), dtype=np.float64)
         
                   
-        peakwidth=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
-        for j in range(0,self._eventresultsstep1['NB']):
-            t=self._eventresultsstep3['t']+self._eventresultsstep3['bunchdelay'][j]
-            if method=='RMS':
-                power=self._eventresultsstep3['powerERMS'][j]
+        peakwidth=np.zeros((num_bunches), dtype=np.float64);
+        for j in range(num_bunches):
+            t = self._pulse_characterization.t + self._pulse_characterization.bunchdelay[j]
+            if method == 'RMS':
+                power = self._pulse_characterization.powerERMS[j]
             elif method=='COM':
-                power=self._eventresultsstep3['powerECOM'][j]
+                power = self._pulse_characterization.powerECOM[j]
             elif method=='RMSCOM':
-                power=(self._eventresultsstep3['powerECOM'][j]+self._eventresultsstep3['powerERMS'][j])/2
+                power = (self._pulse_characterization.powerECOM[j] + self._pulse_characterization.powerERMS[j])/2
             else:
-                return [],False        
+                warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
+                return None   
             #quadratic fit around 5 pixels method
             threshold=np.max(power)/2
             abovethrestimes=t[power>=threshold]
             dt=t[1]-t[0]
             peakwidth[j]=abovethrestimes[-1]-abovethrestimes[0]+dt
             
-        return peakwidth,True
+        return peakwidth
       
     def InterBunchPulseDelayBasedOnCurrent(self):    
         """
@@ -484,17 +455,18 @@ class ShotToShotCharacterization(object):
             out1: List with the delay for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return [],False
+        if not self._image_profile:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
+                'Cannot construct inter bunch pulse delay',UserWarning,'XTCAV',0)
+            return None
             
-        if (self._eventresultsstep1['NB']<1):
-            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        # if (self._eventresultsstep1['NB']<1):
+        #     return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64)
         
-        t=self._eventresultsstep2['PU']['xfs']   
+        t = self._image_profile.physical_units.xfs   
           
-        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
-        for j in range(0,self._eventresultsstep1['NB']):
+        peakpos=np.zeros((self.num_bunches), dtype=np.float64);
+        for j in range(0,self.num_bunches):
             #highest value method
             #peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
             
@@ -503,16 +475,16 @@ class ShotToShotCharacterization(object):
             #peakpos[j]=t[ind]
             
             #quadratic fit around 5 pixels method
-            central=np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])
+            central=np.argmax(self._image_profile.image_stats[j].xProfile)
             try:
-                fit=np.polyfit(t[central-2:central+3],self._eventresultsstep1['imageStats'][j]['xProfile'][central-2:central+3],2)
+                fit=np.polyfit(t[central-2:central+3], self._pulse_characterization.image_stats[j].xProfile[central-2:central+3],2)
                 peakpos[j]=-fit[1]/(2*fit[0])
             except:
-                return [],False  
+                return None 
             
-        return peakpos,True
+        return peakpos
         
-    def InterBunchPulseDelayBasedOnCurrentMultiple(self,n=1,filterwith=7):    
+    def InterBunchPulseDelayBasedOnCurrentMultiple(self, n=1, filterwith=7):    
         """
         Method which returns multiple possible times of lasing for each bunch based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval. The delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches. Then within each bunch the "n" delays are orderer from highest peak current yo lowest peak current.
         Args:
@@ -522,19 +494,20 @@ class ShotToShotCharacterization(object):
             out1: List with a list of "n" delays for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return [],False
+        if not self._image_profile:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
+                'Cannot construct inter bunch pulse delay',UserWarning,'XTCAV',0)
+            return None
             
-        if (self._eventresultsstep1['NB']<1):
-            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        # if (self._eventresultsstep1['NB']<1):
+        #     return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64)
         
-        t=self._eventresultsstep2['PU']['xfs']   
+        t = self._image_profile.physical_units.xfs  
           
-        peakpos=np.zeros((self._eventresultsstep1['NB'],n), dtype=np.float64);
+        peakpos=np.zeros((self.num_bunches,n), dtype=np.float64);
            
-        for j in range(0,self._eventresultsstep1['NB']):
-            profile=self._eventresultsstep1['imageStats'][j]['xProfile'].copy()
+        for j in range(0,self.num_bunches):
+            profile = self._image_profile.image_stats[j].xProfile.copy()
             for k in range(n):
                 #highest value method
                 #peakpos[j]=t[np.argmax(self._eventresultsstep1['imageStats'][j]['xProfile'])]
@@ -544,18 +517,18 @@ class ShotToShotCharacterization(object):
                 #peakpos[j]=t[ind]
                 
                 #quadratic fit around 5 pixels method
-                central=np.argmax(profile)
+                central = np.argmax(profile)
                 try:
-                    fit=np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
-                    peakpos[j,k]=-fit[1]/(2*fit[0])
-                    filter=1-np.exp(-(t-peakpos[j,k])**2/(filterwith/(2*np.sqrt(np.log(2))))**2)
-                    profile=profile*filter                   
+                    fit = np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
+                    peakpos[j,k] =- fit[1]/(2*fit[0])
+                    filter = 1-np.exp(-(t-peakpos[j,k])**2/(filterwith/(2*np.sqrt(np.log(2))))**2)
+                    profile = profile*filter                   
                 except:
-                    peakpos[j,k]=np.nan
+                    peakpos[j,k] = np.nan
                     if k==0:
-                        return [],False
+                        return None
                 
-        return peakpos,True
+        return peakpos
         
     def InterBunchPulseDelayBasedOnCurrentFourierFiltered(self,targetwidthfs=20,thresholdfactor=0):    
         """
@@ -567,33 +540,34 @@ class ShotToShotCharacterization(object):
             out1: List with the delay for each bunch.
             out2: True if the retrieval was successful, False otherwise. 
         """
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return [],False
+        if not self._image_profile:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
+                'Cannot construct inter bunch pulse delay',UserWarning,'XTCAV',0)
+            return None
             
-        if (self._eventresultsstep1['NB']<1):
-            return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64),True
+        # if (self._eventresultsstep1['NB']<1):
+        #     return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64)
         
-        t=self._eventresultsstep2['PU']['xfs']   
+        t = self._image_profile.physical_units.xfs    
         
         #Preparing the low pass filter
-        N=len(t)
-        dt=abs(self._eventresultsstep2['PU']['xfsPerPix'])
+        N = len(t)
+        dt = abs(self._image_profile.physical_units.xfsPerPix)
         if dt*N==0:
-            return [],False
-        df=1/(dt*N)
+            return None
+        df = 1./(dt*N)
         
-        f=np.array(range(0,N/2+1)+range(-N/2+1,0))*df
+        f = np.array(range(0, N/2+1) + range(-N/2+1,0))*df
                            
         ffilter=(1-np.exp(-(f*targetwidthfs)**6))
           
-        peakpos=np.zeros((self._eventresultsstep1['NB']), dtype=np.float64);
-        for j in range(0,self._eventresultsstep1['NB']):
+        peakpos=np.zeros((self.num_bunches), dtype=np.float64);
+        for j in range(0,self.num_bunches):
             #Getting the profile and the filtered version
-            profile=self._eventresultsstep1['imageStats'][j]['xProfile']
-            profilef=profile-np.max(profile)*thresholdfactor
-            profilef[profilef<0]=0
-            profilef=np.fft.ifft(np.fft.fft(profilef)*ffilter)
+            profile = self._image_profile.image_stats[j].xProfile
+            profilef = profile-np.max(profile)*thresholdfactor
+            profilef[profilef<0] = 0
+            profilef = np.fft.ifft(np.fft.fft(profilef)*ffilter)
         
             #highest value method
             #peakpos[j]=t[np.argmax(profilef)]
@@ -608,9 +582,9 @@ class ShotToShotCharacterization(object):
                 fit=np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
                 peakpos[j]=-fit[1]/(2*fit[0])
             except:
-                return [],False  
+                return None 
             
-        return peakpos,True
+        return peakpos
 
     def QuadRefine(self,p):
         x1,x2,x3 = p + np.array([-1,0,1])
@@ -629,21 +603,22 @@ class ShotToShotCharacterization(object):
             out2: electron currents in arbitrary units
             out3: True if the retrieval was successful, False otherwise
         """
-        if not self._currenteventprocessedstep2:
-            if not self.ProcessShotStep2():
-                return [],[],False
+        if not self._image_profile:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
+                'Cannot construct electron current',UserWarning,'XTCAV',0)
+            return None, None
         
-        t=self._eventresultsstep2['PU']['xfs']   
+        t = self._image_profile.physical_units.xfs    
 
-        tout=np.zeros((self._eventresultsstep1['NB'],len(t)), dtype=np.float64);
-        currents=np.zeros((self._eventresultsstep1['NB'],len(t)), dtype=np.float64);
-        for j in range(0,self._eventresultsstep1['NB']):
+        tout = np.zeros((self.num_bunches, len(t)), dtype=np.float64);
+        currents = np.zeros((self.num_bunches, len(t)), dtype=np.float64);
+        for j in range(0,self.num_bunches):
             tout[j,:]=t
-            currents[j,:]=self._eventresultsstep1['imageStats'][j]['xProfile']
+            currents[j,:]=self._image_profile.image_stats[j].xProfile
                     
-        return tout,currents,True
+        return tout, currents
         
-    def XRayPower(self,method='RMSCOM'):       
+    def XRayPower(self, method='RMSCOM'):       
         """
         Method which returns the power profile for the X-Rays generated by each electron bunch. This is the averaged result from the RMS method and the COM method.
 
@@ -654,53 +629,30 @@ class ShotToShotCharacterization(object):
             out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
             out3: True if the retrieval was successful, False otherwise. 
         """
-        
-        t=[]
-        power=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return t,power,False
-        
+
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
+                'Cannot construct pulse FWHM',UserWarning,'XTCAV',0)
+            return None, None
                         
-        mastert=self._eventresultsstep3['t']
-        t=np.zeros((self._nb,len(mastert)), dtype=np.float64);
-        for j in range(0,self._nb):
-            t[j,:]=mastert+self._eventresultsstep3['bunchdelay'][j]
+        mastert = self._pulse_characterization.t
+
+        t = np.zeros((self.num_bunches, len(mastert)), dtype=np.float64);
+        for j in range(self.num_bunches):
+            t[j,:] = mastert+self._pulse_characterization.bunchdelay[j]
 
         if method=='RMS':
-            power=self._eventresultsstep3['powerERMS']
+            power = self._pulse_characterization.powerERMS
         elif method=='COM':
-            power=self._eventresultsstep3['powerECOM']
+            power = self._pulse_characterization.powerECOM
         elif method=='RMSCOM':
-            power=(self._eventresultsstep3['powerECOM']+self._eventresultsstep3['powerERMS'])/2
+            power = (self._pulse_characterization.powerECOM + self._pulse_characterization.powerERMS)/2
         else:
-            return t,[],False  
+            warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
+            return t, None
             
-        return t,power,True         
+        return t,power       
         
-    def XRayPowerRMSBased(self):   
-        """
-        Method which returns the power profile for the X-Rays generated by each electron bunch using the RMS method.
-
-        Returns: 
-            out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
-            out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
-            out3: True if the retrieval was successful, False otherwise. 
-        """
-        
-        return self.XRayPower(method='RMS') 
-
-    def XRayPowerCOMBased(self):   
-        """
-        Method which returns the power profile for the X-Rays generated by each electron bunch using the COM method.
-
-        Returns: 
-            out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
-            out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
-            out3: True if the retrieval was successful, False otherwise.
-        """
-        return self.XRayPower(method='COM') 
         
     def XRayEnergyPerBunch(self,method='RMSCOM'):   
         """
@@ -710,60 +662,26 @@ class ShotToShotCharacterization(object):
         Returns: 
             out1: List with the values of the energy for each bunch in J
             out2: True if the retrieval was successful, False otherwise.
-        """
-        energies=[]
-            
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return energies,False
+        """ 
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
+                'Cannot construct pulse FWHM',UserWarning,'XTCAV',0)
+            return None
         
         
         if method=='RMS':
-            energyperbunch=self._eventresultsstep3['lasingenergyperbunchERMS']
+            energyperbunch = self._pulse_characterization.lasingenergyperbunchERMS
         elif method=='COM':
-            energyperbunch=self._eventresultsstep3['lasingenergyperbunchECOM']
+            energyperbunch = self._pulse_characterization.lasingenergyperbunchECOM
         elif method=='RMSCOM':
-            energyperbunch=(self._eventresultsstep3['lasingenergyperbunchECOM']+self._eventresultsstep3['lasingenergyperbunchERMS'])/2
+            energyperbunch = (self._pulse_characterization.lasingenergyperbunchECOM + self._pulse_characterization.lasingenergyperbunchERMS)/2
         else:
-            return energies,False
+            warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
+            return None
        
-        return energyperbunch,True  
+        return energyperbunch  
         
-    def XRayEnergyPerBunchCOMBased(self):   
-        """
-        Method which returns the total X-Ray energy generated per bunch based on the COM method.
-
-        Returns: 
-            out1: List with the values of the energy for each bunch in J
-            out2: True if the retrieval was successful, False otherwise.
-        """       
-        return self.XRayEnergyPerBunch(method='COM')
     
-    def XRayEnergyPerBunchRMSBased(self):   
-        """
-        Method which returns the total X-Ray energy generated per bunch based on the RMS method.
-
-        Returns: 
-            out1: List with the values of the energy for each bunch in J
-            out2: True if the retrieval was successful, False otherwise.
-        """
-        return self.XRayEnergyPerBunch(method='RMS')      
-        
-        
-        
-    def RawXTCAVImage(self):     
-        """
-        Method which returns the raw XTCAV image. This does not require of references at all.
-
-        Returns: 
-            out1: 2D array with the image
-            out2: True if the retrieval was successful, False otherwise.
-        """    
-        if not self._currenteventavailable:
-            return [],False
-            
-        return self._rawimage,True
-        
     def ProcessedXTCAVImage(self):    
         """
         Method which returns the processed XTCAV image after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
@@ -772,11 +690,12 @@ class ShotToShotCharacterization(object):
             out1: 3D array where the first index is bunch number, and the other two are the image.
             out2: True if the retrieval was successful, False otherwise.
         """     
-        if not self._currenteventprocessedstep1:
-            if not self.ProcessShotStep1():
-                return [],False
+        if not self._processed_image:
+            warnings.warn_explicit('Image not processed for current event due to issues with image. ' +\
+                'Returning raw image',UserWarning,'XTCAV',0)
+            return self._rawimage
           
-        return self._eventresultsstep1['processedImage'],True
+        return self._processed_image
         
     def ProcessedXTCAVImageROI(self):    
         """
@@ -786,11 +705,11 @@ class ShotToShotCharacterization(object):
             out1: Dictionary with the region of interest parameters.
             out2: True if the retrieval was successful, False otherwise.
         """     
-        if not self._currenteventprocessedstep1:
-            if not self.ProcessShotStep1():
-                return [],False
+        if not self._processed_image:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image.',UserWarning,'XTCAV',0)
+            return None
             
-        return self._eventresultsstep1['ROI'],True
+        return self._image_profile.roi
         
     def ReconstructionAgreement(self): 
         """
@@ -800,64 +719,10 @@ class ShotToShotCharacterization(object):
             out1: value for the agreement.
             out2: True if the retrieval was successful, False otherwise.
         """
-        if not self._currenteventprocessedstep3:
-            if not self.ProcessShotStep3():
-                return float('nan'),False
+        if not self._pulse_characterization:
+            warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
+                'Cannot calculate reconstruction agreement',UserWarning,'XTCAV',0)
+            return 0
                        
-        return np.mean(self._eventresultsstep3['powerAgreement'])  ,True      
+        return np.mean(self._pulse_characterization.powerAgreement)     
         
-    @property
-    def nb(self):
-        return self._nb
-    @nb.setter
-    def nb(self, nb):
-        if not self._loadedlasingoffreference:
-            self._nb = nb
-    @property
-    def medianfilter(self):
-        return self._medianfilter
-    @medianfilter.setter
-    def medianfilter(self, medianfilter):
-        self._medianfilter = medianfilter
-    @property
-    def snrfilter(self):
-        return self._snrfilter
-    @snrfilter.setter
-    def snrfilter(self, snrfilter):
-        self._snrfilter = snrfilter
-    @property
-    def roiwaistthres(self):
-        return self._roiwaistthres
-    @roiwaistthres.setter
-    def roiwaistthres(self, roiwaistthres):
-        self._roiwaistthres = roiwaistthres
-    @property
-    def roiexpand(self):
-        return self._roiexpand
-    @roiexpand.setter
-    def roiexpand(self, roiexpand):
-        self._roiexpand = roiexpand
-    @property
-    def calibrationpath(self):
-        return self._calpath
-    @calibrationpath.setter
-    def calibrationpath(self, calpath):
-        self._calpath = calpath       
-    @property
-    def islandsplitmethod(self):
-        return self._islandsplitmethod
-    @islandsplitmethod.setter
-    def islandsplitmethod(self, islandsplitmethod):
-        self._islandsplitmethod = islandsplitmethod 
-    @property
-    def islandsplitpar1(self):
-        return self._islandsplitpar1
-    @islandsplitpar1.setter
-    def islandsplitpar1(self, islandsplitpar1):
-        self._islandsplitpar1 = islandsplitpar1 
-    @property
-    def islandsplitpar2(self):
-        return self._islandsplitpar2
-    @islandsplitpar2.setter
-    def islandsplitpar2(self, islandsplitpar2):
-        self._islandsplitpar2 = islandsplitpar2

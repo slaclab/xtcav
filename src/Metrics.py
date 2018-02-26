@@ -8,6 +8,10 @@ import numpy as np
     validity since h5py does not support boolean values (at least that's how it appears..)
     """
 def namedtuple(typename, field_names, default_values=()):
+    """
+    Overwriting namedtuple class to use default arguments for variables not passed in at creation of object
+    Can manually set default value for a variable; otherwise None will become default value
+    """
     T = collections.namedtuple(typename, field_names)
     T.__new__.__defaults__ = (None,) * len(T._fields)
 
@@ -127,9 +131,33 @@ AveragedProfiles = namedtuple('AveragedProfiles',
     'distE',                      #Distance in energy of the center of masses with respect to the center of the first bunch in MeV
     'tRMS',                       #Total dispersion in time in fs
     'eRMS',                       #Total dispersion in energy in MeV
-    'num_bunches',                         #Number of bunches
-    'num_groups',                          #Number of profiles
+    'num_bunches',                #Number of bunches
+    'num_groups',                 #Number of profiles
     'eventTime',                  #Unix times used for jumping to events
     'eventFid'])                  #Fiducial values used for jumping to events
+
+PulseCharacterization = namedtuple('PulseCharacterization',
+    ['t',                        #Master time vector in fs
+    'powerrawECOM',              #Retrieved power in GW based on ECOM without gas detector normalization
+    'powerrawERMS',              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
+    'powerECOM',                 #Retrieved power in GW based on ECOM
+    'powerERMS',                 #Retrieved power in GW based on ERMS
+    'powerAgreement',            #Agreement between the two intensities
+    'bunchdelay',                #Delay from each bunch with respect to the first one in fs
+    'bunchdelaychange',          #Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
+    'xrayenergy',                #Total x-ray energy from the gas detector in J
+    'lasingenergyperbunchECOM',  #Energy of the XRays generated from each bunch for the center of mass approach in J
+    'lasingenergyperbunchERMS',  #Energy of the XRays generated from each bunch for the dispersion approach in J
+    'bunchenergydiff',           #Distance in energy for each bunch with respect to the first one in MeV
+    'bunchenergydiffchange',     #Comparison of that distance with respect to the no lasing
+    'lasingECurrent',            #Electron current for the lasing trace (In #electrons/s)
+    'nolasingECurrent',          #Electron current for the no lasing trace (In #electrons/s)
+    'lasingECOM',                #Lasing energy center of masses for each time in MeV
+    'nolasingECOM',              #No lasing energy center of masses for each time in MeV
+    'lasingERMS',                #Lasing energy dispersion for each time in MeV
+    'nolasingERMS',              #No lasing energy dispersion for each time in MeV
+    'num_bunches',               #Number of bunches
+    'groupnum'                   #group number of lasing-off shot
+    ])
 
 

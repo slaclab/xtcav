@@ -228,72 +228,74 @@ def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     return PhysicalUnits(xfs, yMeV, xfsPerPix, yMeVPerPix, valid)
 
 
-def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
+def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
     """
     Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
     Arguments:
-      PU: physical units of the profiles
-      imageStats: statistics of the xtcav image (profiles)
-      shotToShot: structure with the shot information
+      image_profile: profile for xtcav image
       nolasingAveragedProfiles: no lasing reference profiles
     Output
       pulsecharacterization: retrieved pulse
     """
 
-    NB=len(imageStats)              #Number of bunches
+    image_stats = image_profile.image_stats
+    physical_units = image_profile.physical_units
+    shot_to_shot = image_profile.shot_to_shot
+
+    num_bunches = len(image_stats)              #Number of bunches
     
-    if (NB!=nolasingAveragedProfiles.num_bunches):
+    if (num_bunches!=nolasingAveragedProfiles.num_bunches):
         warnings.warn_explicit('Different number of bunches in the reference',UserWarning,'XTCAV',0)
     
     t=nolasingAveragedProfiles.t   #Master time obtained from the no lasing references
     dt=(t[-1]-t[0])/(t.size-1)
     
-    Nelectrons=shotToShot.dumpecharge/Constants.E_CHARGE;   #Total number of electrons in the bunch    
+    Nelectrons=shot_to_shot.dumpecharge/Constants.E_CHARGE;   #Total number of electrons in the bunch    
     
     #Create the the arrays for the outputs, first index is always bunch number
-    bunchdelay=np.zeros(NB, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
-    bunchdelaychange=np.zeros(NB, dtype=np.float64);                 #Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
-    bunchenergydiff=np.zeros(NB, dtype=np.float64);                  #Distance in energy for each bunch with respect to the first one in MeV
-    bunchenergydiffchange=np.zeros(NB, dtype=np.float64);            #Comparison of that distance with respect to the no lasing
-    eBunchCOM=np.zeros(NB, dtype=np.float64);                   #Energy of the XRays generated from each bunch for the center of mass approach in J
-    eBunchRMS=np.zeros(NB, dtype=np.float64);                   #Energy of the XRays generated from each bunch for the dispersion of mass approach in J
-    powerAgreement=np.zeros(NB, dtype=np.float64);              #Agreement factor between the two methods
-    lasingECurrent=np.zeros((NB,t.size), dtype=np.float64);     #Electron current for the lasing trace (In #electrons/s)
-    nolasingECurrent=np.zeros((NB,t.size), dtype=np.float64);   #Electron current for the no lasing trace (In #electrons/s)
-    lasingECOM=np.zeros((NB,t.size), dtype=np.float64);         #Lasing energy center of masses for each time in MeV
-    nolasingECOM=np.zeros((NB,t.size), dtype=np.float64);       #No lasing energy center of masses for each time in MeV
-    lasingERMS=np.zeros((NB,t.size), dtype=np.float64);         #Lasing energy dispersion for each time in MeV
-    nolasingERMS=np.zeros((NB,t.size), dtype=np.float64);       #No lasing energy dispersion for each time in MeV
-    powerECOM=np.zeros((NB,t.size), dtype=np.float64);      #Retrieved power in GW based on ECOM
-    powerERMS=np.zeros((NB,t.size), dtype=np.float64);      #Retrieved power in GW based on ERMS
+    bunchdelay=np.zeros(num_bunches, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
+    bunchdelaychange=np.zeros(num_bunches, dtype=np.float64);                 #Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
+    bunchenergydiff=np.zeros(num_bunches, dtype=np.float64);                  #Distance in energy for each bunch with respect to the first one in MeV
+    bunchenergydiffchange=np.zeros(num_bunches, dtype=np.float64);            #Comparison of that distance with respect to the no lasing
+    eBunchCOM=np.zeros(num_bunches, dtype=np.float64);                   #Energy of the XRays generated from each bunch for the center of mass approach in J
+    eBunchRMS=np.zeros(num_bunches, dtype=np.float64);                   #Energy of the XRays generated from each bunch for the dispersion of mass approach in J
+    powerAgreement=np.zeros(num_bunches, dtype=np.float64);              #Agreement factor between the two methods
+    lasingECurrent=np.zeros((num_bunches,t.size), dtype=np.float64);     #Electron current for the lasing trace (In #electrons/s)
+    nolasingECurrent=np.zeros((num_bunches,t.size), dtype=np.float64);   #Electron current for the no lasing trace (In #electrons/s)
+    lasingECOM=np.zeros((num_bunches,t.size), dtype=np.float64);         #Lasing energy center of masses for each time in MeV
+    nolasingECOM=np.zeros((num_bunches,t.size), dtype=np.float64);       #No lasing energy center of masses for each time in MeV
+    lasingERMS=np.zeros((num_bunches,t.size), dtype=np.float64);         #Lasing energy dispersion for each time in MeV
+    nolasingERMS=np.zeros((num_bunches,t.size), dtype=np.float64);       #No lasing energy dispersion for each time in MeV
+    powerECOM=np.zeros((num_bunches,t.size), dtype=np.float64);      #Retrieved power in GW based on ECOM
+    powerERMS=np.zeros((num_bunches,t.size), dtype=np.float64);      #Retrieved power in GW based on ERMS
 
-    powerrawECOM=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in GW based on ECOM without gas detector normalization
-    powerrawERMS=np.zeros((NB,t.size), dtype=np.float64);              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
-    groupnum=np.zeros(NB, dtype=np.int32);                  #group number of lasing off shot
+    powerrawECOM=np.zeros((num_bunches,t.size), dtype=np.float64);              #Retrieved power in GW based on ECOM without gas detector normalization
+    powerrawERMS=np.zeros((num_bunches,t.size), dtype=np.float64);              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
+    groupnum=np.zeros(num_bunches, dtype=np.int32);                  #group number of lasing off shot
              
     
     #We treat each bunch separately
-    for j in range(NB):
-        distT=(imageStats[j].xCOM-imageStats[0].xCOM)*PU.xfsPerPix  #Distance in time converted form pixels to fs
-        distE=(imageStats[j].yCOM-imageStats[0].yCOM)*PU.yMeVPerPix #Distance in time converted form pixels to MeV
+    for j in range(num_bunches):
+        distT=(image_stats[j].xCOM-image_stats[0].xCOM)*physical_units.xfsPerPix  #Distance in time converted form pixels to fs
+        distE=(image_stats[j].yCOM-image_stats[0].yCOM)*physical_units.yMeVPerPix #Distance in time converted form pixels to MeV
         
         bunchdelay[j]=distT  #The delay for each bunch is the distance in time
         bunchenergydiff[j]=distE #Same for energy
         
-        dt_old=PU.xfs[1]-PU.xfs[0]; # dt before interpolation 
+        dt_old=physical_units.xfs[1]-physical_units.xfs[0]; # dt before interpolation 
         
-        eCurrent=imageStats[j].xProfile/(dt_old*1e-15)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
+        eCurrent=image_stats[j].xProfile/(dt_old*1e-15)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
         
-        eCOMslice=(imageStats[j].yCOMslice-imageStats[j].yCOM)*PU.yMeVPerPix       #Center of mass in energy for each t converted to the right units        
-        eRMSslice=imageStats[j].yRMSslice*PU.yMeVPerPix                               #Energy dispersion for each t converted to the right units
+        eCOMslice=(image_stats[j].yCOMslice-image_stats[j].yCOM)*physical_units.yMeVPerPix       #Center of mass in energy for each t converted to the right units        
+        eRMSslice=image_stats[j].yRMSslice*physical_units.yMeVPerPix                               #Energy dispersion for each t converted to the right units
 
-        interp=scipy.interpolate.interp1d(PU.xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
+        interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
         eCurrent=interp(t);    
                                                    
-        interp=scipy.interpolate.interp1d(PU.xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
+        interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
         eCOMslice=interp(t);
             
-        interp=scipy.interpolate.interp1d(PU.xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
+        interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
         eRMSslice=interp(t)        
         
         #Find best no lasing match
@@ -342,45 +344,23 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shotToShot.xrayenergy-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
+    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
     escalefactor=np.sum(powerERMS)*dt*1e-15                 #in J
     
     
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
-    for j in range(NB):                 
+    for j in range(num_bunches):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
-        powerERMS[j,:]=shotToShot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
+        powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
         eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*1e-15*1e9
         eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*1e-15*1e9
                     
-    #Create the output structure
-    pulsecharacterization={
-        't':t,                                  #Master time vector in fs
-        'powerrawECOM':powerrawECOM,              #Retrieved power in GW based on ECOM without gas detector normalization
-        'powerrawERMS':powerrawERMS,              #Retrieved power in arbitrary units based on ERMS without gas detector normalization
-        'powerECOM':powerECOM,              #Retrieved power in GW based on ECOM
-        'powerERMS':powerERMS,              #Retrieved power in GW based on ERMS
-        'powerAgreement':powerAgreement,        #Agreement between the two intensities
-        'bunchdelay':bunchdelay,                #Delay from each bunch with respect to the first one in fs
-        'bunchdelaychange':bunchdelaychange,    #Difference between the delay from each bunch with respect to the first one in fs and the same form the non lasing reference
-        'xrayenergy':shotToShot.xrayenergy,  #Total x-ray energy from the gas detector in J
-        'lasingenergyperbunchECOM': eBunchCOM,  #Energy of the XRays generated from each bunch for the center of mass approach in J
-        'lasingenergyperbunchERMS': eBunchRMS,  #Energy of the XRays generated from each bunch for the dispersion approach in J
-        'bunchenergydiff':bunchenergydiff,                  #Distance in energy for each bunch with respect to the first one in MeV
-        'bunchenergydiffchange':bunchenergydiffchange,      #Comparison of that distance with respect to the no lasing
-        'lasingECurrent':lasingECurrent,        #Electron current for the lasing trace (In #electrons/s)
-        'nolasingECurrent':nolasingECurrent,    #Electron current for the no lasing trace (In #electrons/s)
-        'lasingECOM':lasingECOM,                #Lasing energy center of masses for each time in MeV
-        'nolasingECOM':nolasingECOM,            #No lasing energy center of masses for each time in MeV
-        'lasingERMS':lasingERMS,                #Lasing energy dispersion for each time in MeV
-        'nolasingERMS':nolasingERMS,            #No lasing energy dispersion for each time in MeV
-        'NB': NB,                               #Number of bunches
-        'groupnum': groupnum                    #group number of lasing-off shot
-        }
-    
-    
-    return pulsecharacterization
+    return PulseCharacterization(t, powerrawECOM, powerrawERMS, powerECOM, 
+        powerERMS, powerAgreement, bunchdelay, bunchdelaychange, shot_to_shot.xrayenergy, 
+        eBunchCOM, eBunchRMS, bunchenergydiff, bunchenergydiffchange, lasingECurrent,
+        nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
+        groupnum)
     
 def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
     """

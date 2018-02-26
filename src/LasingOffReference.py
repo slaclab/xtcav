@@ -139,7 +139,7 @@ class LasingOffReference(object):
         
         if rank != 0:
             return
-            
+
         sys.stdout.write('\n')
         image_profiles = [item for sublist in image_profiles for item in sublist]
 
@@ -238,5 +238,5 @@ class LasingOffReference(object):
     def Load(path):
         lor = constLoad(path)
         lor.parameters = LasingOffParameters(**lor.parameters)
-        lor.averagedProfiles = LasingOffParameters(**lor.averagedProfiles)        
-        return constLoad(path)
+        lor.averagedProfiles = AveragedProfiles(**lor.averagedProfiles)        
+        return lor
