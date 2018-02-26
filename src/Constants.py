@@ -14,4 +14,6 @@ ENERGY_DETECTOR=0.2
 DUMP_E_CHARGE=175E-12 #IN C
 
 SNR_BORDER=100 #number of pixels near the border that can be considered to contain just noise
+MIN_ROI_SIZE=3 #minimum number of pixels defining region of interest
 
+DEFAULT_SPLIT_METHOD='scipyLabel'

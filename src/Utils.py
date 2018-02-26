@@ -382,22 +382,24 @@ def ProcessLasingSingleShot(PU,imageStats,shotToShot,nolasingAveragedProfiles):
     
     return pulsecharacterization
     
-def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shotsPerGroup):
+def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
     """
     Find the subroi of the image
     Arguments:
-      listROI: list with the axis for all the XTCAV non lasing profiles to average
-      listImageStats: list of the statistics (profiles) for all the XTCAV non lasing profiles to average
-      listShotToShot: list of the shot to shot properties structures for each profile
-      listPU: list of the physical units
-      shotsPerGroup
+      list_image_profiles: list of the image profiles for all the XTCAV non lasing profiles to average
+      shots_per_group
     Output
       averagedProfiles: list with the averaged reference of the reference for each group 
     """
    
-    num_profiles = len(listImageStats)           #Total number of profiles
-    num_bunches = len(listImageStats[0])       #Number of bunches
-    num_groups = int(np.floor(num_profiles/shotsPerGroup))   #Number of groups to make
+    list_image_stats = [profile.image_stats for profile in list_image_profiles]
+    list_physical_units = [profile.physical_units for profile in list_image_profiles]
+    list_roi = [profile.roi for profile in list_image_profiles]
+    list_shot_to_shot = [profile.shot_to_shot for profile in list_image_profiles]
+
+    num_profiles = len(list_image_profiles)           #Total number of profiles
+    num_bunches = len(list_image_stats[0])       #Number of bunches
+    num_groups = int(np.floor(num_profiles/shots_per_group))   #Number of groups to make
             
     
     # Obtain physical units and calculate time vector   
@@ -408,14 +410,14 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
     #We find adequate values for the master time
     for i in range(num_profiles):
         #We compare and update the maximum, minimum and increment value for the master time vector
-        maxt=np.amax([maxt,np.amax(listPU[i].xfs)])
-        mint=np.amin([mint,np.amin(listPU[i].xfs)])
-        mindt=np.amin([mindt,np.abs(listPU[i].xfsPerPix)])
+        maxt=np.amax([maxt,np.amax(list_physical_units[i].xfs)])
+        mint=np.amin([mint,np.amin(list_physical_units[i].xfs)])
+        mindt=np.amin([mindt,np.abs(list_physical_units[i].xfsPerPix)])
             
     #Obtain the number of electrons in each shot
     num_electrons=np.zeros(num_profiles, dtype=np.float64);
     for i in range(num_profiles): 
-        num_electrons[i]=listShotToShot[i].dumpecharge/Constants.E_CHARGE
+        num_electrons[i]=list_shot_to_shot[i].dumpecharge/Constants.E_CHARGE
             
     #To be safe with the master time, we set it to have a step half the minumum step
     dt=mindt/2
@@ -440,8 +442,8 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
         #Calculate interpolated profiles in time for comparison
         profilesT=np.zeros((num_profiles,len(t)), dtype=np.float64);
         for i in range(num_profiles): 
-            distT=(listImageStats[i][j].xCOM-listImageStats[i][0].xCOM)*listPU[i].xfsPerPix
-            profilesT[i,:]=scipy.interpolate.interp1d(listPU[i].xfs-distT,listImageStats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
+            distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
+            profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
             
         #Decide of the groups based on correlation 
         group = np.zeros(num_profiles, dtype=np.int32)       #array that will indicate which group each profile sill correspond to
@@ -459,9 +461,9 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
                 if group[i] == -1:
                     err[i] = np.corrcoef(profilesT[currRef,:],profilesT[i,:])[0,1]**2;
                     
-            #The 'shotsPerGroup-1' profiles with the highest correlation will be also assigned to the same group
+            #The 'shots_per_group-1' profiles with the highest correlation will be also assigned to the same group
             order=np.argsort(err)            
-            for i in range(0,shotsPerGroup-1): 
+            for i in range(0,shots_per_group-1): 
                 group[order[-(1+i)]]=g
                     
         #Once the groups have been decided, the averaging is performed
@@ -469,40 +471,40 @@ def AverageXTCAVProfilesGroups(listROI,listImageStats,listShotToShot,listPU,shot
             for i in range(num_profiles):    
                 if group[i]==g:             #We find the profiles that belong to that group and average them together
                 
-                    eventTime[j][g] = listShotToShot[i].unixtime
-                    eventFid[j][g] = listShotToShot[i].fiducial
-                    distT=(listImageStats[i][j].xCOM-listImageStats[i][0].xCOM)*listPU[i].xfsPerPix #Distance in time converted form pixels to fs
-                    distE=(listImageStats[i][j].yCOM-listImageStats[i][0].yCOM)*listPU[i].yMeVPerPix #Distance in time converted form pixels to MeV
+                    eventTime[j][g] = list_shot_to_shot[i].unixtime
+                    eventFid[j][g] = list_shot_to_shot[i].fiducial
+                    distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix #Distance in time converted form pixels to fs
+                    distE=(list_image_stats[i][j].yCOM-list_image_stats[i][0].yCOM)*list_physical_units[i].yMeVPerPix #Distance in time converted form pixels to MeV
                     averageDistT[j,g]=averageDistT[j,g]+distT       #Accumulate it in the right group
                     averageDistE[j,g]=averageDistE[j,g]+distE       #Accumulate it in the right group
                     
-                    averageTRMS[j,g]=averageTRMS[j,g]+listImageStats[i][j].xRMS*listPU[i].xfsPerPix   #Conversion to fs and accumulate it in the right group
-                    averageERMS[j,g]=averageTRMS[j,g]+listImageStats[i][j].yRMS*listPU[i].yMeVPerPix  #Conversion to MeV and accumulate it in the right group
+                    averageTRMS[j,g]=averageTRMS[j,g]+list_image_stats[i][j].xRMS*list_physical_units[i].xfsPerPix   #Conversion to fs and accumulate it in the right group
+                    averageERMS[j,g]=averageTRMS[j,g]+list_image_stats[i][j].yRMS*list_physical_units[i].yMeVPerPix  #Conversion to MeV and accumulate it in the right group
                                           
-                    dt_old=listPU[i].xfs[1]-listPU[i].xfs[0]; # dt before interpolation   
-                    eCurrent=listImageStats[i][j].xProfile/(dt_old*1e-15)*num_electrons[i]                              #Electron current in electrons/s   
+                    dt_old=list_physical_units[i].xfs[1]-list_physical_units[i].xfs[0]; # dt before interpolation   
+                    eCurrent=list_image_stats[i][j].xProfile/(dt_old*1e-15)*num_electrons[i]                              #Electron current in electrons/s   
                     
-                    eCOMslice=(listImageStats[i][j].yCOMslice-listImageStats[i][j].yCOM)*listPU[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
-                    eRMSslice=listImageStats[i][j].yRMSslice*listPU[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
+                    eCOMslice=(list_image_stats[i][j].yCOMslice-list_image_stats[i][j].yCOM)*list_physical_units[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
+                    eRMSslice=list_image_stats[i][j].yRMSslice*list_physical_units[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
                         
-                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
+                    interp=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
                     averageECurrent[j,g,:]=averageECurrent[j,g,:]+interp(t);  #Accumulate it in the right group                    
                                                 
-                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+                    interp=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
                     averageECOMslice[j,g,:]=averageECOMslice[j,g,:]+interp(t);          #Accumulate it in the right group
                     
-                    interp=scipy.interpolate.interp1d(listPU[i].xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+                    interp=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
                     averageERMSslice[j,g,:]=averageERMSslice[j,g,:]+interp(t);          #Accumulate it in the right group
                                   
 
             #Normalization off all the averaged stuff                      
-            averageECurrent[j,g,:]=averageECurrent[j,g,:]/shotsPerGroup
-            averageECOMslice[j,g,:]=averageECOMslice[j,g,:]/shotsPerGroup    
-            averageERMSslice[j,g,:]=averageERMSslice[j,g,:]/shotsPerGroup
-            averageDistT[j,g]=averageDistT[j,g]/shotsPerGroup
-            averageDistE[j,g]=averageDistE[j,g]/shotsPerGroup
-            averageTRMS[j,g]=averageTRMS[j,g]/shotsPerGroup
-            averageERMS[j,g]=averageERMS[j,g]/shotsPerGroup     
+            averageECurrent[j,g,:]=averageECurrent[j,g,:]/shots_per_group
+            averageECOMslice[j,g,:]=averageECOMslice[j,g,:]/shots_per_group    
+            averageERMSslice[j,g,:]=averageERMSslice[j,g,:]/shots_per_group
+            averageDistT[j,g]=averageDistT[j,g]/shots_per_group
+            averageDistE[j,g]=averageDistE[j,g]/shots_per_group
+            averageTRMS[j,g]=averageTRMS[j,g]/shots_per_group
+            averageERMS[j,g]=averageERMS[j,g]/shots_per_group     
             
     return AveragedProfiles(t, averageECurrent, averageECOMslice, 
         averageERMSslice, averageDistT, averageDistE, averageTRMS, 

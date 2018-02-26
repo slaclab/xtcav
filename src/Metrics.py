@@ -7,7 +7,7 @@ import numpy as np
     Most perform checks to make sure information is valid. Using 1/0 to denote
     validity since h5py does not support boolean values (at least that's how it appears..)
     """
-def namedtuple_with_defaults(typename, field_names, default_values=()):
+def namedtuple(typename, field_names, default_values=()):
     T = collections.namedtuple(typename, field_names)
     T.__new__.__defaults__ = (None,) * len(T._fields)
 
@@ -20,7 +20,7 @@ def namedtuple_with_defaults(typename, field_names, default_values=()):
     return T
 
 
-ROIMetrics = namedtuple_with_defaults('ROIMetrics',
+ROIMetrics = namedtuple('ROIMetrics',
     ['xN', #Size of the image in X   
     'x0',  #Position of the first pixel in x
     'yN',  #Size of the image in Y 
@@ -37,7 +37,7 @@ ROIMetrics = namedtuple_with_defaults('ROIMetrics',
      'y': np.arange(0, 1024)})
 
 
-GlobalCalibration = namedtuple_with_defaults('GlobalCalibration', 
+GlobalCalibration = namedtuple('GlobalCalibration', 
     ['umperpix', #Pixel size of the XTCAV camera
     'strstrength', #Strength parameter
     'rfampcalib', #Calibration of the RF amplitude
@@ -46,12 +46,12 @@ GlobalCalibration = namedtuple_with_defaults('GlobalCalibration',
     'dumpdisp'])
 
       
-ShotToShotParameters = namedtuple_with_defaults('ShotToShotParameters',
+ShotToShotParameters = namedtuple('ShotToShotParameters',
     ['ebeamcharge',  #ebeamcharge
     'dumpecharge',  #dumpecharge in C
     'xtcavrfamp',   #RF amplitude
     'xtcavrfphase', #RF phase
-    'xrayenergy',         #Xrays energy in J
+    'xrayenergy',   #Xrays energy in J
     'unixtime',
     'fiducial',
     'valid'],
@@ -63,7 +63,7 @@ ShotToShotParameters = namedtuple_with_defaults('ShotToShotParameters',
     )
 
 
-ImageStatistics = namedtuple_with_defaults('ImageStatistics', 
+ImageStatistics = namedtuple('ImageStatistics', 
     ['imfrac',
     'xProfile',
     'yProfile',
@@ -77,27 +77,28 @@ ImageStatistics = namedtuple_with_defaults('ImageStatistics',
     'yRMSslice'])
 
 
-PhysicalUnits = namedtuple_with_defaults('PhysicalUnits', 
+PhysicalUnits = namedtuple('PhysicalUnits', 
     ['xfs',
     'yMeV',
     'xfsPerPix',
     'yMeVPerPix',
     'valid'])
 
-ImageProfile = namedtuple_with_defaults('ImageProfile', 
+ImageProfile = namedtuple('ImageProfile', 
     ['image_stats',
     'roi',
     'shot_to_shot',
     'physical_units'])
 
 
-LasingOffParameters = namedtuple_with_defaults('LasingOffParameters', 
+LasingOffParameters = namedtuple('LasingOffParameters', 
     ['experiment', 
     'maxshots', 
     'run', 
+    'start',
     'validityrange', 
     'darkreferencepath', 
-    'nb', 
+    'num_bunches', 
     'groupsize', 
     'medianfilter', 
     'snrfilter', 
@@ -110,14 +111,14 @@ LasingOffParameters = namedtuple_with_defaults('LasingOffParameters',
     'version'])
 
 
-DarkBackgroundParameters = namedtuple_with_defaults('DarkBackgroundParameters', 
+DarkBackgroundParameters = namedtuple('DarkBackgroundParameters', 
     ['experiment', 
     'maxshots', 
     'run', 
     'validityrange', 
     'calibrationpath'])
 
-AveragedProfiles = namedtuple_with_defaults('AveragedProfiles',
+AveragedProfiles = namedtuple('AveragedProfiles',
     ['t',                         #Master time in fs
     'eCurrent',                   #Electron current in (#electrons/s)
     'eCOMslice',                  #Energy center of masses for each time in MeV

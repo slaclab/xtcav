@@ -2,7 +2,7 @@ import h5py
 import numpy
 import logging
 
-class Empty(object):
+class Default(object):
     pass
 
 class ConstantsStore(object):
@@ -23,7 +23,7 @@ class ConstantsStore(object):
         self.cwd = self.cwd[:self.cwd.rfind('/')]
     def typeok(self,obj,name):
         '''check if we support serializing this type to hdf'''
-        allowed = [dict,int,float,str, list, numpy.ndarray]
+        allowed = [dict, int, float, str, list, numpy.ndarray]
         return type(obj) in allowed
     def storevalue(self,v,name):
         '''persist one of the supported types to the hdf file'''
@@ -51,7 +51,7 @@ class ConstantsStore(object):
 
 class ConstantsLoad(object):
     def __init__(self,file):
-        self.obj = Empty()
+        self.obj = Default()
         self.f = h5py.File(file,'r')
         self.f.visititems(self.loadCallBack)
         self.f.close()
