@@ -1,4 +1,4 @@
-from xtcav.GenerateDarkBackground import *
+from xtcav.DarkBackground import *
 import numpy as np
 
 dark_background = DarkBackground(
