@@ -7,7 +7,6 @@ import glob
 import sys
 import getopt
 import warnings
-import Utils as xtu
 import UtilsPsana as xtup
 from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
@@ -71,7 +70,7 @@ class DarkBackground(object):
         n=0  #Counter for the total number of xtcav images processed 
         run = dataSource.runs().next()        
         
-        ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(epicsStore, run, xtcav_camera)
+        ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(run, xtcav_camera)
         accumulator_xtcav = np.zeros((ROI_XTCAV.yN, ROI_XTCAV.xN), dtype=np.float64)
 
         times = run.times()

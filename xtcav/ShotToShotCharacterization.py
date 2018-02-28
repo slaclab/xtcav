@@ -38,16 +38,15 @@ class ShotToShotCharacterization(object):
     def __init__(self, 
         experiment='',
         runs='',
-        num_bunches = 1,
-        maxshots=float('+inf'),
-        start_image=0,
-        medianfilter = 3,
-        snrfilter = 10,
-        roiwaistthres = 0.2,
-        roiexpand = 2.5,
-        islandsplitmethod='scipylabel',
-        islandsplitpar1=3.0,
-        islandsplitpar2=5.0,
+        num_bunches = None,
+        start_image = 0,
+        medianfilter = None,
+        snrfilter = None,
+        roiwaistthres = None,
+        roiexpand = None,
+        islandsplitmethod=None,
+        islandsplitpar1=None,
+        islandsplitpar2=None,
         darkreferencepath=None,
         lasingoffreferencepath=None,
         calpath=''
@@ -60,7 +59,6 @@ class ShotToShotCharacterization(object):
         self.experiment = experiment                #Experiment label
         self.runs = runs                            #Run numbers
         self.num_bunches = num_bunches              #Number of bunches
-        self.maxshots = maxshots
         self.start_image = start_image
         self.medianfilter = medianfilter            #Number of neighbours for median filter
         self.snrfilter = snrfilter                  #Number of sigmas for the noise threshold
@@ -89,15 +87,19 @@ class ShotToShotCharacterization(object):
 
             
     def SetDataSource(self, datasource=None):
-        if not datasource:
-            datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
-        self._datasource = datasource
+        if datasource:
+            self.runs = '137' # change this
+            self.experiment = datasource.env().experiment()
+        
+        # agh this is really hacky
+        self._datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
         self.SetEnvironment()
+        self.LoadDarkReference()
+        self.LoadLasingOffReference()
 
 
     def SetEnvironment(self):
         self._env = self._datasource.env()
-        self._epicsstore = self._env.epicsStore()
         self._xtcav_camera = psana.Detector(Constants.SRC)
         self._ebeam_data = psana.Detector(Constants.EBEAM)
         self._gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
@@ -106,10 +108,9 @@ class ShotToShotCharacterization(object):
 
         self._currentrun = self._datasource.runs().next()
 
-        self._roixtcav, first_image = xtup.GetXTCAVImageROI(self._epicsstore, self._currentrun, self._xtcav_camera, start = self.start_image)
-        self._global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(self._epicsstore, self._currentrun, self._xtcav_camera, start=first_image)
-        self._saturation_value, self.start_image = xtup.GetCameraSaturationValue(self._epicsstore, self._currentrun, self._xtcav_camera, start=first_image)
-
+        self._roixtcav, first_image = xtup.GetXTCAVImageROI(self._currentrun, self._xtcav_camera, start = self.start_image)
+        self._global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(self._currentrun, self._xtcav_camera, start=first_image)
+        self._saturation_value, self.start_image = xtup.GetCameraSaturationValue(self._currentrun, self._xtcav_camera, start=first_image)
         self._envset = True
 
 
@@ -123,7 +124,7 @@ class ShotToShotCharacterization(object):
 
         if not self.darkreferencepath:
             if not self._envset:
-                warnings.warn_explicit('Dark reference not loaded. Must set datasource or supply darkreferencepath','XTCAV',0)
+                #warnings.warn_explicit('Dark reference not loaded. Must set datasource or supply darkreferencepath',UserWarning,'XTCAV',0)
                 return 
 
             cp=CalibrationPaths(self._env, self.calpath)       
@@ -145,7 +146,7 @@ class ShotToShotCharacterization(object):
 
         if not self.lasingoffreferencepath:
             if not self._envset:
-                warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath','XTCAV',0)
+                #warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath',UserWarning, 'XTCAV',0)
                 return 
             cp=CalibrationPaths(self._env,self.calpath)     
             self.lasingoffreferencepath = cp.findCalFileName('lasingoffreference',  self._currentrun)
@@ -186,11 +187,11 @@ class ShotToShotCharacterization(object):
         #Only use the parameters if they have not been manually set, except for the number of bunches. That one is mandatory.
         if self.num_bunches and self.num_bunches != self._lasingoffreference.parameters.num_bunches:
             warnings.warn_explicit('Number of bunches input (%d) differs from number of bunches found in lasing off reference (%d). Overwriting input value.' % (self.num_bunches,self._lasingoffreference.parameters.num_bunches) ,UserWarning,'XTCAV',0)
-            self.num_bunches=self._lasingoffreference.parameters.num_bunches
+        self.num_bunches=self._lasingoffreference.parameters.num_bunches
         if not self.medianfilter:
             self.medianfilter=self._lasingoffreference.parameters.medianfilter
         if not self.snrfilter:
-            self.snrfilter=self._lasingoffreference.parameterssnrfilter
+            self.snrfilter=self._lasingoffreference.parameters.snrfilter
         if not self.roiwaistthres:
             self.roiwaistthres=self._lasingoffreference.parameters.roiwaistthres
         if not self.roiexpand:
@@ -204,31 +205,11 @@ class ShotToShotCharacterization(object):
         if not self.islandsplitpar2:        
             self.islandsplitpar2=self._lasingoffreference.parameters.islandsplitpar2 
 
-
-    def processRuns(self):
-
-        if not self._envset:
-            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
-            return
-
-        for r,run in enumerate(self._datasource.runs()):
-            n_r=0  #Counter for the total number of xtcav images processed within the run       
-            times = run.times()
-            ### parallelize?
-            for t in times:
-                if n_r >= self.maxshots:
-                    return
-                evt = run.event(t)
-                success = self.processEvent(evt)
-                if success:
-                    n_r += 1
-                    
-
                            
     def processEvent(self,evt):
         """
         Args:
-            evt (psana event): relevant event to retrieve information form
+            evt (psana event): relevant event to retrieve information from
             
         Returns:
             True: All the input form detectors necessary for a good reconstruction are present in the event. 
@@ -242,7 +223,7 @@ class ShotToShotCharacterization(object):
         img = self._xtcav_camera.image(evt)
 
         if img is None: 
-            return 
+            return False
 
         self._rawimage = img
         self._currentevent = evt
@@ -256,6 +237,7 @@ class ShotToShotCharacterization(object):
 
         self.setImageProfile()
         if not self._image_profile:
+            warnings.warn_explicit('Cannot create image profile',UserWarning,'XTCAV',0)
             return False
 
         if not self._lasingoffreference:
@@ -263,8 +245,9 @@ class ShotToShotCharacterization(object):
             return False
 
         #Using all the available data, perform the retrieval for that given shot        
-        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averagedProfiles) 
+        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averaged_profiles) 
         return True if self._pulse_characterization else False
+
 
     def setImageProfile(self):
         """
@@ -690,7 +673,7 @@ class ShotToShotCharacterization(object):
             out1: 3D array where the first index is bunch number, and the other two are the image.
             out2: True if the retrieval was successful, False otherwise.
         """     
-        if not self._processed_image:
+        if self._processed_image is None:
             warnings.warn_explicit('Image not processed for current event due to issues with image. ' +\
                 'Returning raw image',UserWarning,'XTCAV',0)
             return self._rawimage
@@ -705,7 +688,7 @@ class ShotToShotCharacterization(object):
             out1: Dictionary with the region of interest parameters.
             out2: True if the retrieval was successful, False otherwise.
         """     
-        if not self._processed_image:
+        if self._processed_image is None:
             warnings.warn_explicit('Image profile not created for current event due to issues with image.',UserWarning,'XTCAV',0)
             return None
             

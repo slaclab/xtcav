@@ -1,4 +1,7 @@
 ._.DS_Store
 .DS_Store
-examples/xtcavLasing.py
-src/LasingOff.py
+xtcav/examples/xtcavLasing.py
+xtcav/LasingOff.py
+xtcav.egg-info
+*.npy
+*.pyc

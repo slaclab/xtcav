@@ -103,9 +103,9 @@ class LasingOffReference(object):
         run = dataSource.runs().next()
         env = dataSource.env()
 
-        self.ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(epicsStore, run, self.xtcav_camera, start = self.parameters.start)
-        self.global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(epicsStore, run, self.xtcav_camera, start=first_image)
-        self.saturation_value, first_image = xtup.GetCameraSaturationValue(epicsStore, run, self.xtcav_camera, start=first_image)
+        self.ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(run, self.xtcav_camera, start = self.parameters.start)
+        self.global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(run, self.xtcav_camera, start=first_image)
+        self.saturation_value, first_image = xtup.GetCameraSaturationValue(run, self.xtcav_camera, start=first_image)
 
         self.dark_background = self.getDarkBackground(env)
 
@@ -148,9 +148,9 @@ class LasingOffReference(object):
             image_profiles = image_profiles[0:self.parameters.maxshots]
             
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
-        averagedProfiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.groupsize);     
+        averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.groupsize);     
 
-        self.averagedProfiles=averagedProfiles
+        self.averaged_profiles=averaged_profiles
         self.n=num_processed    
         
         if not self.parameters.validityrange:
@@ -231,12 +231,12 @@ class LasingOffReference(object):
         instance = LasingOffReference()
         instance.parameters = dict(vars(self.parameters))
         instance.n = self.n
-        instance.averagedProfiles = dict(vars(self.averagedProfiles))
+        instance.averaged_profiles = dict(vars(self.averaged_profiles))
         constSave(instance,path)
 
     @staticmethod    
     def Load(path):
         lor = constLoad(path)
         lor.parameters = LasingOffParameters(**lor.parameters)
-        lor.averagedProfiles = AveragedProfiles(**lor.averagedProfiles)        
+        lor.averaged_profiles = AveragedProfiles(**lor.averaged_profiles)        
         return lor

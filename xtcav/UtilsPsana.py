@@ -4,7 +4,7 @@ import warnings
 from Metrics import *
 import Constants
 
-def GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=None):
+def GetCameraSaturationValue(run, xtcav_camera, start=None):
     analysis_version = psana.Detector('XTCAV_Analysis_Version')
     times = run.times()
 
@@ -25,8 +25,9 @@ def GetCameraSaturationValue(epicsStore, run, xtcav_camera, start=None):
             return (1<<14)-1, t
 
     return None, end_of_images
+    
 
-def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
+def GetGlobalXTCAVCalibration(run, xtcav_camera, start=None):
     """
     Obtain the global XTCAV calibration form the epicsStore
     Arguments:
@@ -62,6 +63,7 @@ def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
             dumpe=dumpe(evt), 
             dumpdisp=dumpdisp(evt)
         )
+
         for k,v in global_calibration._asdict().iteritems():
             if not v:
                 warnings.warn_explicit('No XTCAV Calibration for epics variable ' + k, UserWarning,'XTCAV',0)
@@ -72,7 +74,7 @@ def GetGlobalXTCAVCalibration(epicsStore, run, xtcav_camera, start=None):
     return None, end_of_images
           
 
-def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
+def GetXTCAVImageROI(run, xtcav_camera, start=None):
 
     roiXN=psana.Detector('XTCAV_ROI_sizeX')
     roiX=psana.Detector('XTCAV_ROI_startX')
@@ -109,6 +111,7 @@ def GetXTCAVImageROI(epicsStore, run, xtcav_camera, start=None):
 
     return ROIMetrics(), end_of_images 
 
+
 def GetShotToShotParameters(ebeam, gasdetector, evt_id):
     time = evt_id.time()
     sec  = time[0]
@@ -139,6 +142,7 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
     shot_to_shot = shot_to_shot._replace(xrayenergy = 1e-3*energydetector)
 
     return shot_to_shot
+
 
 def DivideImageTasks(first_image, last_image, rank, size):
     num_shots = last_image - first_image

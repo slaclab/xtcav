@@ -244,13 +244,14 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
 
     num_bunches = len(image_stats)              #Number of bunches
     
-    if (num_bunches!=nolasingAveragedProfiles.num_bunches):
+    if (num_bunches != nolasingAveragedProfiles.num_bunches):
         warnings.warn_explicit('Different number of bunches in the reference',UserWarning,'XTCAV',0)
     
-    t=nolasingAveragedProfiles.t   #Master time obtained from the no lasing references
-    dt=(t[-1]-t[0])/(t.size-1)
+    t = nolasingAveragedProfiles.t   #Master time obtained from the no lasing references
+    dt = (t[-1]-t[0])/(t.size-1)
     
-    Nelectrons=shot_to_shot.dumpecharge/Constants.E_CHARGE;   #Total number of electrons in the bunch    
+             #Electron charge in coulombs
+    Nelectrons = shot_to_shot.dumpecharge/Constants.E_CHARGE   #Total number of electrons in the bunch    
     
     #Create the the arrays for the outputs, first index is always bunch number
     bunchdelay=np.zeros(num_bunches, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
@@ -282,7 +283,7 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
         bunchdelay[j]=distT  #The delay for each bunch is the distance in time
         bunchenergydiff[j]=distE #Same for energy
         
-        dt_old=physical_units.xfs[1]-physical_units.xfs[0]; # dt before interpolation 
+        dt_old=physical_units.xfs[1]-physical_units.xfs[0] # dt before interpolation 
         
         eCurrent=image_stats[j].xProfile/(dt_old*1e-15)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
         
