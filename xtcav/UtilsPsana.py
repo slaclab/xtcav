@@ -1,6 +1,7 @@
 import numpy as np
 import psana
 import warnings
+import time
 from Metrics import *
 import Constants
 
@@ -36,6 +37,7 @@ def GetGlobalXTCAVCalibration(run, xtcav_camera, start=None):
       globalCalibration: struct with the parameters
       ok: if all the data was retrieved correctly
     """
+
     umperpix=psana.Detector('XTCAV_calib_umPerPx')
     strstrength=psana.Detector('XTCAV_strength_par_S')
     rfampcalib=psana.Detector('XTCAV_Amp_Des_calib_MV')
@@ -43,7 +45,7 @@ def GetGlobalXTCAVCalibration(run, xtcav_camera, start=None):
     dumpe=psana.Detector('XTCAV_Beam_energy_dump_GeV')
     dumpdisp=psana.Detector('XTCAV_calib_disp_posToEnergy')
     times = run.times()
-
+    
     end_of_images = len(times)
     if not start in range(end_of_images + 1):
         start = 0
@@ -54,7 +56,7 @@ def GetGlobalXTCAVCalibration(run, xtcav_camera, start=None):
         # skip if empty image
         if img is None: 
             continue
-       
+
         global_calibration = GlobalCalibration(
             umperpix=umperpix(evt), 
             strstrength=strstrength(evt), 
@@ -63,7 +65,7 @@ def GetGlobalXTCAVCalibration(run, xtcav_camera, start=None):
             dumpe=dumpe(evt), 
             dumpdisp=dumpdisp(evt)
         )
-
+        
         for k,v in global_calibration._asdict().iteritems():
             if not v:
                 warnings.warn_explicit('No XTCAV Calibration for epics variable ' + k, UserWarning,'XTCAV',0)

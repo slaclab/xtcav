@@ -82,6 +82,7 @@ class DarkBackground(object):
             #as an incorrect design in psana where epics information is not stored per-shot (it is in a more global object
             #called "Env")
             img = xtcav_camera.image(evt)
+
             # skip if empty image
             if img is None: 
                 continue

@@ -76,9 +76,6 @@ class ShotToShotCharacterization(object):
         if experiment and runs:
             self.SetDataSource()
 
-        self.LoadDarkReference()
-        self.LoadLasingOffReference()
-
 
     def SetExperiment(self, experiment, runs):
         self.experiment = experiment
@@ -88,11 +85,11 @@ class ShotToShotCharacterization(object):
             
     def SetDataSource(self, datasource=None):
         if datasource:
-            self.runs = '137' # change this
             self.experiment = datasource.env().experiment()
-        
-        # agh this is really hacky
-        self._datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
+            self._datasource = psana.DataSource(datasource.env().jobName())
+        else:
+            self._datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
+
         self.SetEnvironment()
         self.LoadDarkReference()
         self.LoadLasingOffReference()
@@ -116,9 +113,7 @@ class ShotToShotCharacterization(object):
 
     def LoadDarkReference(self):
         """
-        Method that loads the dark reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
-        
-        Returns: True if successful, False otherwise        
+        Method that loads the dark reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.    
         """
         self._darkreference = None
 
@@ -140,7 +135,6 @@ class ShotToShotCharacterization(object):
     def LoadLasingOffReference(self):
         """
         Method that loads the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
-        Returns: True if successful, False otherwise        
         """
         self._lasingoffreference = None
 
@@ -184,7 +178,9 @@ class ShotToShotCharacterization(object):
 
 
     def LoadLasingOffReferenceParameters(self):
-        #Only use the parameters if they have not been manually set, except for the number of bunches. That one is mandatory.
+        """
+        Method that sets processing parameters from the lasing off reference in case they have not been explicitly set by the user (except for the number of bunches. That one is must match). This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.             
+        """
         if self.num_bunches and self.num_bunches != self._lasingoffreference.parameters.num_bunches:
             warnings.warn_explicit('Number of bunches input (%d) differs from number of bunches found in lasing off reference (%d). Overwriting input value.' % (self.num_bunches,self._lasingoffreference.parameters.num_bunches) ,UserWarning,'XTCAV',0)
         self.num_bunches=self._lasingoffreference.parameters.num_bunches
@@ -215,7 +211,6 @@ class ShotToShotCharacterization(object):
             True: All the input form detectors necessary for a good reconstruction are present in the event. 
             False: The information from some detectors is missing for that event. It may still be possible to get information.
         """
-        ### check if 'runs' is equivalent to calibration params?
         if not self._envset:
             warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
             return 
@@ -252,8 +247,6 @@ class ShotToShotCharacterization(object):
     def setImageProfile(self):
         """
         Method that runs the first step of the reconstruction, which consists of getting statistics from the XTCAV trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
-
-        Returns: True if it was successful, False otherwise
         """
         if np.max(self._rawimage)>=self._saturation_value : #Detection if the image is saturated, we skip if it is
             warnings.warn_explicit('Saturated Image. Skipping...',UserWarning,'XTCAV',0)
@@ -305,12 +298,11 @@ class ShotToShotCharacterization(object):
         Method which returns a dictionary based list with the physical units for the cropped image
 
         Returns: 
-            out1: List with the results
+            PhysicalUnits: List with the results
                 'yMeVPerPix':         Number of MeV per pixel for the vertical axis of the image
                 'xfsPerPix':          Number of fs per pixel for the horizontal axis of the image
                 'xfs':                Horizontal axis of the image in fs
                 'yMeV':               Vertical axis of the image in MeV
-            out2: True if the retrieval was successful, False otherwise. 
         """
     
         if not self._image_profile:
@@ -324,7 +316,7 @@ class ShotToShotCharacterization(object):
         Method which returns a dictionary based list with the full results of the characterization
 
         Returns: 
-            out1: List with the results
+            PulseCharacterization: List with the results
                 't':                           Master time vector in fs
                 'powerECOM':                    Retrieved power in GW based on ECOM
                 'powerERMS':                    Retrieved power in GW based on ERMS
@@ -343,7 +335,6 @@ class ShotToShotCharacterization(object):
                 'lasingERMS':                   Lasing energy dispersion for each time in MeV
                 'nolasingERMS':                 No lasing energy dispersion for each time in MeV
                 'num_bunches':                           Number of bunches
-            out2: True if the retrieval was successful, False otherwise. 
         """
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image',UserWarning,'XTCAV',0)
@@ -356,8 +347,7 @@ class ShotToShotCharacterization(object):
         Args:
             method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
-            out1: List of the delays for each bunch.
-            out2: True if the retrieval was successful, False otherwise. 
+            List of the delays for each bunch.
         """
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
@@ -397,8 +387,7 @@ class ShotToShotCharacterization(object):
         Args:
             method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
-            out1: List of the full widths half maximum for each bunch.
-            out2: True if the retrieval was successful, False otherwise. 
+            List of the full widths half maximum for each bunch.
         """
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
@@ -435,8 +424,7 @@ class ShotToShotCharacterization(object):
         Method which returns the time of lasing for each bunch based on the peak electron current on each bunch. A lasing off reference is not necessary for this retrieval. The delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches.
 
         Returns: 
-            out1: List with the delay for each bunch.
-            out2: True if the retrieval was successful, False otherwise. 
+            List with the delay for each bunch.
         """
         if not self._image_profile:
             warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
@@ -474,16 +462,12 @@ class ShotToShotCharacterization(object):
             n (int): number of possible times of lasing (peaks in the electron current) to find per bunch
             filterwith (float): Witdh of the peak that is removed before searching for the next peak in the same bunch
         Returns: 
-            out1: List with a list of "n" delays for each bunch.
-            out2: True if the retrieval was successful, False otherwise. 
+            List with a list of "n" delays for each bunch.
         """
         if not self._image_profile:
             warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
                 'Cannot construct inter bunch pulse delay',UserWarning,'XTCAV',0)
             return None
-            
-        # if (self._eventresultsstep1['NB']<1):
-        #     return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64)
         
         t = self._image_profile.physical_units.xfs  
           
@@ -520,17 +504,13 @@ class ShotToShotCharacterization(object):
             targetwidthfs (float): Witdh of the peak to be used for calculating delay
             thresholdfactor (float): Value between 0 and 1 that indicates which threshold factor to apply to filter the signal before calculating the fourier transform
         Returns: 
-            out1: List with the delay for each bunch.
-            out2: True if the retrieval was successful, False otherwise. 
+            List with the delay for each bunch.
         """
         if not self._image_profile:
             warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
                 'Cannot construct inter bunch pulse delay',UserWarning,'XTCAV',0)
             return None
-            
-        # if (self._eventresultsstep1['NB']<1):
-        #     return np.zeros((self._eventresultsstep1['NB']), dtype=np.float64)
-        
+             
         t = self._image_profile.physical_units.xfs    
         
         #Preparing the low pass filter
@@ -584,7 +564,6 @@ class ShotToShotCharacterization(object):
         Returns: 
             out1: time vectors in fs
             out2: electron currents in arbitrary units
-            out3: True if the retrieval was successful, False otherwise
         """
         if not self._image_profile:
             warnings.warn_explicit('Image profile not created for current event due to issues with image. ' +\
@@ -601,6 +580,7 @@ class ShotToShotCharacterization(object):
                     
         return tout, currents
         
+
     def XRayPower(self, method='RMSCOM'):       
         """
         Method which returns the power profile for the X-Rays generated by each electron bunch. This is the averaged result from the RMS method and the COM method.
@@ -610,7 +590,6 @@ class ShotToShotCharacterization(object):
         Returns: 
             out1: time vectors in fs. 2D array where the first index refers to bunch number, and the second index to time.
             out2: power profiles in GW. 2D array where the first index refers to bunch number, and the second index to the power profile.
-            out3: True if the retrieval was successful, False otherwise. 
         """
 
         if not self._pulse_characterization:
@@ -643,14 +622,12 @@ class ShotToShotCharacterization(object):
         Args:
             method (str): method to use to obtain the power profile. 'RMS', 'COM' or 'RMSCOM' (Average of both)
         Returns: 
-            out1: List with the values of the energy for each bunch in J
-            out2: True if the retrieval was successful, False otherwise.
+            List with the values of the energy for each bunch in J
         """ 
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
                 'Cannot construct pulse FWHM',UserWarning,'XTCAV',0)
             return None
-        
         
         if method=='RMS':
             energyperbunch = self._pulse_characterization.lasingenergyperbunchERMS
@@ -670,8 +647,7 @@ class ShotToShotCharacterization(object):
         Method which returns the processed XTCAV image after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
 
         Returns: 
-            out1: 3D array where the first index is bunch number, and the other two are the image.
-            out2: True if the retrieval was successful, False otherwise.
+            3D array where the first index is bunch number, and the other two are the image.
         """     
         if self._processed_image is None:
             warnings.warn_explicit('Image not processed for current event due to issues with image. ' +\
@@ -685,8 +661,7 @@ class ShotToShotCharacterization(object):
         Method which returns the position of the processed XTCAV image within the whole CCD after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
 
         Returns: 
-            out1: Dictionary with the region of interest parameters.
-            out2: True if the retrieval was successful, False otherwise.
+            Dictionary with the region of interest parameters.
         """     
         if self._processed_image is None:
             warnings.warn_explicit('Image profile not created for current event due to issues with image.',UserWarning,'XTCAV',0)
@@ -699,8 +674,7 @@ class ShotToShotCharacterization(object):
         Value for the agreement of the reconstruction using the RMS method and using the COM method. It consists of a value ranging from -1 to 1.
 
         Returns: 
-            out1: value for the agreement.
-            out2: True if the retrieval was successful, False otherwise.
+            value for the agreement.
         """
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image. ' +\
