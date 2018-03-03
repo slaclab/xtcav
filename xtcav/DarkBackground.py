@@ -43,7 +43,10 @@ class DarkBackground(object):
             experiment = experiment, maxshots = maxshots, run = run_number, 
             validityrange = validityrange, calibrationpath = calibrationpath)
 
-    def Generate(self, savetofile=True):
+    def generate(self, savetofile=True):
+        """
+        Method to generate Dark Background Reference and save file with results
+        """
         
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
@@ -106,9 +109,9 @@ class DarkBackground(object):
         if savetofile:
             cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
             file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
-            self.Save(file)
+            self.save(file)
 
-    def Save(self,path): 
+    def save(self,path): 
         # super hacky... allows us to save without overwriting current instance
         instance = copy.deepcopy(self)
         if instance.ROI:
@@ -117,7 +120,7 @@ class DarkBackground(object):
         constSave(instance,path)
         
     @staticmethod    
-    def Load(path):        
+    def load(path):        
         db = constLoad(path)
         db.ROI = ROIMetrics(**db.ROI)
         db.parameters = DarkBackgroundParameters(**db.parameters)

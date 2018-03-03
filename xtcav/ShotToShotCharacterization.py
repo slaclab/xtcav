@@ -129,7 +129,7 @@ class ShotToShotCharacterization(object):
                 warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
                 return    
         
-        self._darkreference = DarkBackground.Load(self.darkreferencepath)
+        self._darkreference = DarkBackground.load(self.darkreferencepath)
 
                 
     def LoadLasingOffReference(self):
@@ -151,7 +151,7 @@ class ShotToShotCharacterization(object):
                 self.LoadDefaultProcessingParameters()            
                 return
 
-        self._lasingoffreference = LasingOffReference.Load(self.lasingoffreferencepath)
+        self._lasingoffreference = LasingOffReference.load(self.lasingoffreferencepath)
         self.LoadLasingOffReferenceParameters()
 
             

@@ -4,13 +4,14 @@ import numpy as np
 #
 import scipy.interpolate
 #import scipy.stats.mstats 
-
+import time
 import warnings
 import scipy.ndimage as im 
 import scipy.io
 import math
 import cv2
 import Constants
+import scipy.signal as md
 
 from Metrics import *
 
@@ -85,37 +86,34 @@ def DenoiseImage(image,medianfilter,snrfilter):
       snrfilter: factor to multiply the standard deviation of the noise to use as a threshold
     Output
       image: filtered image
-      ok: true if there is something in the image
+      contains_data: true if there is something in the image
     """
-    contains_data=True
-    #Applygin the median filter
-    image=im.median_filter(image,medianfilter)
+    contains_data = True
+    #Applying the median filter
+    image = im.median_filter(image, medianfilter)#md.medfilt2d(image, medianfilter)#
+
+    if np.sum(image) <= 0:
+        warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
+        return image, False
     
     #Obtaining the mean and the standard deviation of the noise
     mean=np.mean(image[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER]);
     std=np.std(image[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER]);
     
-    if(np.sum(image)<=0):
-        print np.sum(image)
-        warnings.warn_explicit('Image Completely Empty After Background Subtraction',UserWarning,'XTCAV',0)
-        contains_data=0
-    
     #Subtracting the mean of the noise
-    image=image-mean
+    image = image - mean
     
     #Setting a threshold equal to signal to noise ratio times the standard deviation
     thres=snrfilter*std    
     image[image < thres] = 0 
-    ### look at standard deviation instead
-    #We also normalize the image to have a total area of one
-    # if(np.sum(image)>0):
-    #     if (np.sort(image.flatten())[-100]<200):#We make sure it is not just noise, but looking at the 200th pixel
-    #         warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-    #         ok=0
-    image=image/np.sum(image)
-    # else:
-    #     warnings.warn_explicit('Image Completely Empty',UserWarning,'XTCAV',0)
-    #     ok=0        
+    if np.sum(image) > 0:
+        if np.std(image) < 1: #if float(np.count_nonzero(image))/np.size(image) < 0.001: #We make sure it is not just noise by checking that at least 1% of values are non-zero
+            warnings.warn_explicit('Only 1%% of image pixels were not registered as noise',UserWarning,'XTCAV',0)
+            return image, False
+        image=image/np.sum(image)
+    else:
+        warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
+        return image, False      
     
     return image, contains_data
 

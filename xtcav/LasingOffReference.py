@@ -31,6 +31,9 @@ size = comm.Get_size()
         experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
         runs (str): String with a run number, or a run interval. E.g. '123'  '134-156' 145,136'
         maxshots (int): Maximum number of images to use for the references.
+        start_image (int): image in run to start from
+        validityrange (tuple): If not set, the validity range for the reference will go from the 
+        first run number used to generate the reference and the last run.
         calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
         num_bunches (int): Number of bunches.
         medianfilter (int): Number of neighbours for median filter.
@@ -47,12 +50,12 @@ class LasingOffReference(object):
             experiment='amoc8114',  #Experiment label
             maxshots=401,           #Maximum number of valid shots to process
             run_number='86',        #Run number
-            start=0,                #Starting image
+            start_image=0,          #Starting image in run
             validityrange=None,
             darkreferencepath=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
             groupsize=5 ,           #Number of profiles to average together
-            medianfilter=3,         #Number of neighbours for median filter
+            medianfilter=3,         #Number of neighbours for median filter in algorithm
             snrfilter=10,           #Number of sigmas for the noise threshold
             roiwaistthres=0.2,      #Parameter for the roi location
             roiexpand=2.5,          #Parameter for the roi location
@@ -62,14 +65,17 @@ class LasingOffReference(object):
             calpath=''):
 
         self.parameters = LasingOffParameters(experiment = experiment,
-            maxshots = maxshots, run = run_number, start = start, validityrange = validityrange, 
+            maxshots = maxshots, run = run_number, start = start_image, validityrange = validityrange, 
             darkreferencepath = darkreferencepath, num_bunches = num_bunches, groupsize=groupsize, 
             medianfilter=medianfilter, snrfilter=snrfilter, roiwaistthres=roiwaistthres,
             roiexpand = roiexpand, islandsplitmethod=islandsplitmethod, islandsplitpar2 = islandsplitpar2,
             islandsplitpar1=islandsplitpar1, calpath=calpath, version=1)
 
 
-    def Generate(self, savetofile=True):
+    def generate(self, savetofile=True):
+        """
+        Method to generate Lasing Off Reference and save file with results
+        """
         
         #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
@@ -93,9 +99,6 @@ class LasingOffReference(object):
 
         #Gas detectors for the pulse energies
         self.gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
-
-        #Stores for environment variables   
-        epicsStore = dataSource.env().epicsStore()
 
         #Empty list for the statistics obtained from each image, the shot to shot properties, and the ROI of each image (although this ROI is initially the same for each shot, it becomes different when the image is cropped around the trace)
         list_image_profiles= []
@@ -141,6 +144,7 @@ class LasingOffReference(object):
             return
 
         sys.stdout.write('\n')
+        # Flatten gathered arrays
         image_profiles = [item for sublist in image_profiles for item in sublist]
 
         #Since there are 12 cores it is possible that there are more references than needed. In that case we discard some
@@ -154,18 +158,27 @@ class LasingOffReference(object):
         self.n=num_processed    
         
         if not self.parameters.validityrange:
-            self.parameters = self.parameters._replace(validityrange=[self.parameters.run, 'end'])
+            self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
            
         if savetofile:
             cp = CalibrationPaths(env, self.parameters.calpath)
             file = cp.newCalFileName('lasingoffreference', self.parameters.validityrange[0], self.parameters.validityrange[1])
-            self.Save(file)
+            self.save(file)
 
         
     def getImageProfile(self, evt):
+        """
+        Run decomposition algorithms on xtcav image. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally
+
+        Returns:
+            image_stats
+            roi
+            shot_to_shot
+            physical_units
+        """
 
         img = self.xtcav_camera.image(evt)
-            # skip if empty image or saturated
+        # skip if empty image or saturated
         if img is None: 
             return
 
@@ -179,9 +192,10 @@ class LasingOffReference(object):
         shot_to_shot = xtup.GetShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         if not shot_to_shot.valid: #If the information is not good, we skip the event
             return 
-        
+
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img, ROI = xtu.SubtractBackground(img, self.ROI_XTCAV, self.dark_background)         
+        img, ROI = xtu.SubtractBackground(img, self.ROI_XTCAV, self.dark_background)  
+
         img, contains_data = xtu.DenoiseImage(img, self.parameters.medianfilter, self.parameters.snrfilter)                    #Remove noise from the image and normalize it
         if not contains_data:                                        #If there is nothing in the image we skip the event  
             return 
@@ -216,6 +230,9 @@ class LasingOffReference(object):
 
 
     def getDarkBackground(self, env):
+        """
+        Internal method. Loads dark background reference
+        """
         if not self.parameters.darkreferencepath:
             cp = CalibrationPaths(env, self.parameters.calpath)
             darkreferencepath = cp.findCalFileName('pedestals', int(self.parameters.run))
@@ -224,9 +241,9 @@ class LasingOffReference(object):
                 return None
 
             self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
-        return DarkBackground.Load(self.parameters.darkreferencepath)
+        return DarkBackground.load(self.parameters.darkreferencepath)
 
-    def Save(self, path):
+    def save(self, path):
         # super hacky... allows us to save without overwriting current instance
         instance = LasingOffReference()
         instance.parameters = dict(vars(self.parameters))
@@ -235,7 +252,7 @@ class LasingOffReference(object):
         constSave(instance,path)
 
     @staticmethod    
-    def Load(path):
+    def load(path):
         lor = constLoad(path)
         lor.parameters = LasingOffParameters(**lor.parameters)
         lor.averaged_profiles = AveragedProfiles(**lor.averaged_profiles)        
