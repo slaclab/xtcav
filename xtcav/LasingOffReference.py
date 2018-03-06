@@ -119,12 +119,19 @@ class LasingOffReference(object):
         #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
         image_numbers = xtup.DivideImageTasks(first_image, len(times), rank, size)
 
+        images = []
+
         for t in image_numbers: 
             evt = run.event(times[t])
             image_profile = self.getImageProfile(evt)
 
             if not image_profile:
                 continue
+            saveable = {}
+            for k,v in dict(vars(image_profile)).iteritems():
+                print v
+                saveable[k] = dict(vars(v))
+            images.append(saveable)
                                                                                                                                                                                     
             list_image_profiles.append(image_profile)     
             num_processed += 1
@@ -137,11 +144,13 @@ class LasingOffReference(object):
             if num_processed >= np.ceil(self.parameters.maxshots/float(size)):
                 break
 
-        #  here gather all shots in one core, add all lists
+        # here gather all shots in one core, add all lists
         image_profiles = comm.gather(list_image_profiles, root=0)
         
         if rank != 0:
             return
+
+        np.save("test_profiles.npy", images)
 
         sys.stdout.write('\n')
         # Flatten gathered arrays
@@ -200,13 +209,15 @@ class LasingOffReference(object):
         if not contains_data:                                        #If there is nothing in the image we skip the event  
             return 
 
-        img, ROI=xtu.FindROI(img, ROI, self.parameters.roiwaistthres, self.parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        img, ROI = xtu.FindROI(img, ROI, self.parameters.roiwaistthres, self.parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
         if ROI.xN < 3 or ROI.yN < 3:
             print 'ROI too small', ROI.xN, ROI.yN
             return 
 
         img = su.SplitImage(img, self.parameters.num_bunches, self.parameters.islandsplitmethod, 
             self.parameters.islandsplitpar1, self.parameters.islandsplitpar2)#new
+
+        #self.p_img = img
 
         num_bunches_found = img.shape[0]
         if self.parameters.num_bunches != num_bunches_found:

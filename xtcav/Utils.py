@@ -226,12 +226,12 @@ def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     return PhysicalUnits(xfs, yMeV, xfsPerPix, yMeVPerPix, valid)
 
 
-def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
+def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
     """
     Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
     Arguments:
       image_profile: profile for xtcav image
-      nolasingAveragedProfiles: no lasing reference profiles
+      nolasing_averaged_profiles: no lasing reference profiles
     Output
       pulsecharacterization: retrieved pulse
     """
@@ -242,10 +242,10 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
 
     num_bunches = len(image_stats)              #Number of bunches
     
-    if (num_bunches != nolasingAveragedProfiles.num_bunches):
+    if (num_bunches != nolasing_averaged_profiles.num_bunches):
         warnings.warn_explicit('Different number of bunches in the reference',UserWarning,'XTCAV',0)
     
-    t = nolasingAveragedProfiles.t   #Master time obtained from the no lasing references
+    t = nolasing_averaged_profiles.t   #Master time obtained from the no lasing references
     dt = (t[-1]-t[0])/(t.size-1)
     
              #Electron charge in coulombs
@@ -298,10 +298,10 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
         eRMSslice=interp(t)        
         
         #Find best no lasing match
-        NG=nolasingAveragedProfiles.eCurrent.shape[1];
+        NG=nolasing_averaged_profiles.eCurrent.shape[1];
         err= np.zeros(NG, dtype=np.float64);
         for g in range(NG):
-            err[g] = np.corrcoef(eCurrent,nolasingAveragedProfiles.eCurrent[j,g,:])[0,1]**2;
+            err[g] = np.corrcoef(eCurrent,nolasing_averaged_profiles.eCurrent[j,g,:])[0,1]**2;
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
         order=np.argsort(err)
@@ -309,14 +309,13 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
         groupnum[j]=refInd
         
         #The change in the delay and in energy with respect to the same bunch for the no lasing reference
-        bunchdelaychange[j]=distT-nolasingAveragedProfiles.distT[j,refInd]
-        bunchenergydiffchange[j]=distE-nolasingAveragedProfiles.distE[j,refInd]
+        bunchdelaychange[j]=distT-nolasing_averaged_profiles.distT[j,refInd]
+        bunchenergydiffchange[j]=distE-nolasing_averaged_profiles.distE[j,refInd]
                                        
         #We do proper assignations
         lasingECurrent[j,:]=eCurrent
-        nolasingECurrent[j,:]=nolasingAveragedProfiles.eCurrent[j,refInd,:]
+        nolasingECurrent[j,:]=nolasing_averaged_profiles.eCurrent[j,refInd,:]
 
-        
         #We threshold the ECOM and ERMS based on electron current
         threslevel=0.1;
         threslasing=np.amax(lasingECurrent[j,:])*threslevel;
@@ -327,14 +326,12 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
         ind2=np.amin([indiceslasing[0][-1],indicesnolasing[0][-1]])        
         if ind1>ind2:
             ind1=ind2
-            
         
         #And do the rest of the assignations taking into account the thresholding
         lasingECOM[j,ind1:ind2]=eCOMslice[ind1:ind2]
-        nolasingECOM[j,ind1:ind2]=nolasingAveragedProfiles.eCOMslice[j,refInd,ind1:ind2]
+        nolasingECOM[j,ind1:ind2]=nolasing_averaged_profiles.eCOMslice[j,refInd,ind1:ind2]
         lasingERMS[j,ind1:ind2]=eRMSslice[ind1:ind2]
-        nolasingERMS[j,ind1:ind2]=nolasingAveragedProfiles.eRMSslice[j,refInd,ind1:ind2]
-        
+        nolasingERMS[j,ind1:ind2]=nolasing_averaged_profiles.eRMSslice[j,refInd,ind1:ind2]
         
         #First calculation of the power based on center of masses and dispersion for each bunch
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6)*eCurrent    #In J/s
@@ -361,7 +358,7 @@ def ProcessLasingSingleShot(image_profile, nolasingAveragedProfiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
+def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
     """
     Find the subroi of the image
     Arguments:
@@ -378,7 +375,7 @@ def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
 
     num_profiles = len(list_image_profiles)           #Total number of profiles
     num_bunches = len(list_image_stats[0])       #Number of bunches
-    num_groups = int(np.floor(num_profiles/shots_per_group))   #Number of groups to make
+    shots_per_group = int(np.floor(num_profiles/num_groups))   #Number of groups to make
             
     
     # Obtain physical units and calculate time vector   
@@ -419,7 +416,8 @@ def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
     for j in range(num_bunches):
         #Decide which profiles are going to be in which groups and average them together
         #Calculate interpolated profiles in time for comparison
-        profilesT=np.zeros((num_profiles,len(t)), dtype=np.float64);
+        profilesT=np.zeros((num_profiles,len(t)), dtype=np.float64)
+        correlation = np.zeros 
         for i in range(num_profiles): 
             distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
             profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
@@ -444,7 +442,7 @@ def AverageXTCAVProfilesGroups(list_image_profiles, shots_per_group):
             order=np.argsort(err)            
             for i in range(0,shots_per_group-1): 
                 group[order[-(1+i)]]=g
-                    
+        print list(group)
         #Once the groups have been decided, the averaging is performed
         for g in range(num_groups):                 #For each group
             for i in range(num_profiles):    
