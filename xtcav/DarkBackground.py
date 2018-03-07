@@ -10,9 +10,8 @@ import warnings
 import UtilsPsana as xtup
 from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
-from DarkBackground import *
 from CalibrationPaths import *
-import Constants
+import Constants as Cn
 from Metrics import *
   
 """
@@ -32,21 +31,17 @@ class DarkBackground(object):
         maxshots=401, 
         run_number='86', 
         validityrange=None, 
-        calibrationpath=''):
+        calibrationpath='',
+        savetofile=True):
 
         self.image=[]
         self.ROI=None
-        self.run=''
         self.n=0
 
         self.parameters = DarkBackgroundParameters(
             experiment = experiment, maxshots = maxshots, run = run_number, 
             validityrange = validityrange, calibrationpath = calibrationpath)
 
-    def generate(self, savetofile=True):
-        """
-        Method to generate Dark Background Reference and save file with results
-        """
         
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
@@ -64,7 +59,7 @@ class DarkBackground(object):
         dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
         
         #Camera and type for the xtcav images
-        xtcav_camera = psana.Detector(Constants.SRC)
+        xtcav_camera = psana.Detector(Cn.SRC)
         
         #Stores for environment variables    
         configStore=dataSource.env().configStore()
@@ -111,8 +106,8 @@ class DarkBackground(object):
             file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
 
+
     def save(self,path): 
-        # super hacky... allows us to save without overwriting current instance
         instance = copy.deepcopy(self)
         if instance.ROI:
             instance.ROI = dict(vars(instance.ROI))
@@ -121,7 +116,7 @@ class DarkBackground(object):
         
     @staticmethod    
     def load(path):        
-        db = constLoad(path)
-        db.ROI = ROIMetrics(**db.ROI)
-        db.parameters = DarkBackgroundParameters(**db.parameters)
-        return db
+        obj = constLoad(path)
+        obj.ROI = ROIMetrics(**obj.ROI)
+        obj.parameters = DarkBackgroundParameters(**obj.parameters)
+        return obj

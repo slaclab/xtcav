@@ -160,4 +160,3 @@ PulseCharacterization = namedtuple('PulseCharacterization',
     'groupnum'                   #group number of lasing-off shot
     ])
 
-

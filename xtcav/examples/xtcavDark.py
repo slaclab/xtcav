@@ -6,6 +6,5 @@ dark_background = DarkBackground(
 	run_number='104', 
 	maxshots=150)
 
-dark_background.generate()
-
-#print np.sum(dark_background.image)
+# Debugging
+# print np.sum(dark_background.image)

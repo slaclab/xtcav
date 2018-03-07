@@ -13,8 +13,9 @@ import Utils as xtu
 import UtilsPsana as xtup
 import SplittingUtils as su
 import Constants
-from DarkBackground import *
+from Metrics import *
 from CalibrationPaths import *
+from DarkBackground import *
 from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
 
@@ -46,7 +47,7 @@ size = comm.Get_size()
 
 class LasingOffReference(object):
 
-    def __init__(self, 
+    def __init__(self,
             experiment='amoc8114',  #Experiment label
             maxshots=401,           #Maximum number of valid shots to process
             run_number='86',        #Run number
@@ -62,7 +63,8 @@ class LasingOffReference(object):
             islandsplitmethod = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
             islandsplitpar1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
             islandsplitpar2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
-            calpath=''):
+            calpath='',
+            savetofile=True):
 
         self.parameters = LasingOffParameters(experiment = experiment,
             maxshots = maxshots, run = run_number, start = start_image, validityrange = validityrange, 
@@ -72,14 +74,9 @@ class LasingOffReference(object):
             islandsplitpar1=islandsplitpar1, calpath=calpath, version=1)
 
 
-    def generate(self, savetofile=True):
-        """
-        Method to generate Lasing Off Reference and save file with results
-        """
-        
-        #Handle warnings
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
+        
         if rank == 0:
             print 'Lasing off reference'
             print '\t Experiment: %s' % self.parameters.experiment
@@ -92,13 +89,13 @@ class LasingOffReference(object):
         dataSource = psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
 
         #Camera for the xtcav images
-        self.xtcav_camera = psana.Detector(Constants.SRC)
+        xtcav_camera = psana.Detector(Constants.SRC)
 
         #Ebeam type
-        self.ebeam_data = psana.Detector(Constants.EBEAM)
+        ebeam_data = psana.Detector(Constants.EBEAM)
 
         #Gas detectors for the pulse energies
-        self.gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
+        gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
 
         #Empty list for the statistics obtained from each image, the shot to shot properties, and the ROI of each image (although this ROI is initially the same for each shot, it becomes different when the image is cropped around the trace)
         list_image_profiles= []
@@ -106,11 +103,11 @@ class LasingOffReference(object):
         run = dataSource.runs().next()
         env = dataSource.env()
 
-        self.ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(run, self.xtcav_camera, start = self.parameters.start)
-        self.global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(run, self.xtcav_camera, start=first_image)
-        self.saturation_value, first_image = xtup.GetCameraSaturationValue(run, self.xtcav_camera, start=first_image)
+        roi_xtcav, first_image = xtup.GetXTCAVImageROI(run, xtcav_camera, start = self.parameters.start)
+        global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(run, xtcav_camera, start=first_image)
+        saturation_value, first_image = xtup.GetCameraSaturationValue(run, xtcav_camera, start=first_image)
 
-        self.dark_background = self.getDarkBackground(env)
+        dark_background = self._getDarkBackground(env)
 
         num_processed = 0 #Counter for the total number of xtcav images processed within the run        
         times = run.times()
@@ -119,28 +116,19 @@ class LasingOffReference(object):
         #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
         image_numbers = xtup.DivideImageTasks(first_image, len(times), rank, size)
 
-        images = []
-
         for t in image_numbers: 
             evt = run.event(times[t])
-            image_profile = self.getImageProfile(evt)
+            image_profile = self._getImageProfile(evt, dark_background, xtcav_camera, global_calibration, 
+                                                    saturation_value, roi_xtcav, ebeam_data, gasdetector_data)
 
             if not image_profile:
                 continue
-            saveable = {}
-            for k,v in dict(vars(image_profile)).iteritems():
-                print v
-                saveable[k] = dict(vars(v))
-            images.append(saveable)
                                                                                                                                                                                     
             list_image_profiles.append(image_profile)     
             num_processed += 1
 
-            # print core numb and percentage
-            if num_processed % 5 == 0:
-                extrainfo = '\r' if size == 1 else '\nCore %d: '%(rank + 1)
-                sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(num_processed) / np.ceil(self.parameters.maxshots/float(size)) *100, num_processed, np.ceil(self.parameters.maxshots/float(size))))
-                sys.stdout.flush()
+            self._printProgressStatements(num_processed)
+
             if num_processed >= np.ceil(self.parameters.maxshots/float(size)):
                 break
 
@@ -150,8 +138,6 @@ class LasingOffReference(object):
         if rank != 0:
             return
 
-        np.save("test_profiles.npy", images)
-
         sys.stdout.write('\n')
         # Flatten gathered arrays
         image_profiles = [item for sublist in image_profiles for item in sublist]
@@ -159,7 +145,7 @@ class LasingOffReference(object):
         #Since there are 12 cores it is possible that there are more references than needed. In that case we discard some
         if len(image_profiles) > self.parameters.maxshots:
             image_profiles = image_profiles[0:self.parameters.maxshots]
-            
+         
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
         averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.groupsize);     
 
@@ -168,14 +154,23 @@ class LasingOffReference(object):
         
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
-           
+
         if savetofile:
             cp = CalibrationPaths(env, self.parameters.calpath)
             file = cp.newCalFileName('lasingoffreference', self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
 
+
+    def _printProgressStatements(self, num_processed):
+        # print core numb and percentage
+        if num_processed % 5 == 0:
+            extrainfo = '\r' if size == 1 else '\nCore %d: '%(rank + 1)
+            sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(num_processed) / np.ceil(self.parameters.maxshots/float(size)) *100, num_processed, np.ceil(self.parameters.maxshots/float(size))))
+            sys.stdout.flush()
+
         
-    def getImageProfile(self, evt):
+    def _getImageProfile(self, evt, dark_background, xtcav_camera, global_calibration, 
+        saturation_value, roi_xtcav, ebeam_data, gasdetector_data):
         """
         Run decomposition algorithms on xtcav image. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally
 
@@ -186,24 +181,24 @@ class LasingOffReference(object):
             physical_units
         """
 
-        img = self.xtcav_camera.image(evt)
+        img = xtcav_camera.image(evt)
         # skip if empty image or saturated
         if img is None: 
             return
 
-        if np.max(img) >= self.saturation_value:
+        if np.max(img) >= saturation_value:
             warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
             return 
 
-        ebeam = self.ebeam_data.get(evt)
-        gasdetector = self.gasdetector_data.get(evt)
+        ebeam = ebeam_data.get(evt)
+        gasdetector = gasdetector_data.get(evt)
 
         shot_to_shot = xtup.GetShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         if not shot_to_shot.valid: #If the information is not good, we skip the event
             return 
 
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img, ROI = xtu.SubtractBackground(img, self.ROI_XTCAV, self.dark_background)  
+        img, ROI = xtu.SubtractBackground(img, roi_xtcav, dark_background)  
 
         img, contains_data = xtu.DenoiseImage(img, self.parameters.medianfilter, self.parameters.snrfilter)                    #Remove noise from the image and normalize it
         if not contains_data:                                        #If there is nothing in the image we skip the event  
@@ -225,7 +220,7 @@ class LasingOffReference(object):
 
         image_stats = xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
 
-        physical_units = xtu.CalculatePhyscialUnits(ROI,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, self.global_calibration)   
+        physical_units = xtu.CalculatePhyscialUnits(ROI,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
         if not physical_units.valid:
             return 
 
@@ -240,7 +235,7 @@ class LasingOffReference(object):
         return ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
 
 
-    def getDarkBackground(self, env):
+    def _getDarkBackground(self, env):
         """
         Internal method. Loads dark background reference
         """
@@ -255,16 +250,16 @@ class LasingOffReference(object):
         return DarkBackground.load(self.parameters.darkreferencepath)
 
     def save(self, path):
-        # super hacky... allows us to save without overwriting current instance
-        instance = LasingOffReference()
+
+        ###Move this to file interface folder...
+        instance = copy.deepcopy(self)
         instance.parameters = dict(vars(self.parameters))
-        instance.n = self.n
         instance.averaged_profiles = dict(vars(self.averaged_profiles))
         constSave(instance,path)
 
-    @staticmethod    
+    @staticmethod
     def load(path):
         lor = constLoad(path)
         lor.parameters = LasingOffParameters(**lor.parameters)
-        lor.averaged_profiles = AveragedProfiles(**lor.averaged_profiles)        
+        lor.averaged_profiles = AveragedProfiles(**lor.averaged_profiles)
         return lor

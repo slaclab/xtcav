@@ -11,7 +11,8 @@ import scipy.io
 import math
 import cv2
 import Constants
-import scipy.signal as md
+from sklearn.cluster import AgglomerativeClustering
+from sklearn import metrics
 
 from Metrics import *
 
@@ -423,26 +424,17 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
             profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
             
         #Decide of the groups based on correlation 
-        group = np.zeros(num_profiles, dtype=np.int32)       #array that will indicate which group each profile sill correspond to
-        group[:]=-1                             #initiated to -1
-        
-        for g in range(num_groups):                     #For each group
-            currRef=np.where(group==-1)[0]  
-            currRef=currRef[0]                  #We pick the first member to be the first one that has not been assigned to a group yet
+        if not num_groups:
+            silhouette_scores = {}
+            for i in range(2,10):
+                model = AgglomerativeClustering(n_clusters=i, linkage="average", affinity="cosine")
+                model.fit(profilesT)
+                silhouette_scores[i] = metrics.silhouette_score(profilesT, model.labels_, metric='cosine')
+            num_groups = max(silhouette_scores, key=silhouette_scores.get)
 
-            group[currRef]=g                   #We assign it the current group
-            
-            # We calculate the correlation of the first profile to the rest of available profiles
-            err = np.zeros(num_profiles, dtype=np.float64);              
-            for i in range(currRef, num_profiles): 
-                if group[i] == -1:
-                    err[i] = np.corrcoef(profilesT[currRef,:],profilesT[i,:])[0,1]**2;
-                    
-            #The 'shots_per_group-1' profiles with the highest correlation will be also assigned to the same group
-            order=np.argsort(err)            
-            for i in range(0,shots_per_group-1): 
-                group[order[-(1+i)]]=g
-        print list(group)
+        model = AgglomerativeClustering(n_clusters=num_groups, linkage="average", affinity="cosine")
+        model.fit(profilesT)
+        group = model.labels_
         #Once the groups have been decided, the averaging is performed
         for g in range(num_groups):                 #For each group
             for i in range(num_profiles):    
