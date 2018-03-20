@@ -12,8 +12,7 @@ from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
 from CalibrationPaths import *
 import Constants as Cn
-from Metrics import *
-  
+from Utils import namedtuple, ROIMetrics  
 """
     Class that generates a dark background image for XTCAV reconstruction purposes
     Arguments:
@@ -66,12 +65,12 @@ class DarkBackground(object):
         epicsStore=dataSource.env().epicsStore()
 
         n=0  #Counter for the total number of xtcav images processed 
-        run = dataSource.runs().next()        
+        run = dataSource.runs().next()     
         
-        ROI_XTCAV, first_image = xtup.GetXTCAVImageROI(run, xtcav_camera)
-        accumulator_xtcav = np.zeros((ROI_XTCAV.yN, ROI_XTCAV.xN), dtype=np.float64)
-
-        times = run.times()
+        roi_xtcav, first_image = self._getCalibrationValues(run, xtcav_camera)
+        accumulator_xtcav = np.zeros((roi_xtcav.yN, roi_xtcav.xN), dtype=np.float64)
+        
+        times = run.times()  
         for t in range(first_image, len(times)):
             evt=run.event(times[t])
         
@@ -96,7 +95,7 @@ class DarkBackground(object):
                 break                          
         #At the end of the program the total accumulator is saved  
         self.image=accumulator_xtcav/n
-        self.ROI=ROI_XTCAV
+        self.ROI=roi_xtcav
         
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=[self.parameters.run, 'end'])
@@ -105,6 +104,28 @@ class DarkBackground(object):
             cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
             file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
+
+    
+    @staticmethod
+    def _getCalibrationValues(run, xtcav_camera):
+        roi_xtcav = None
+        times = run.times()
+
+        end_of_images = len(times)
+        for t in range(end_of_images):
+            evt = run.event(times[t])
+            img = xtcav_camera.image(evt)
+            # skip if empty image
+            if img is None: 
+                continue
+            roi_xtcav = xtup.GetXTCAVImageROI(evt)
+            
+            if not roi_xtcav:
+                continue
+
+            return roi_xtcav, t
+
+        return roi_xtcav, end_of_images
 
 
     def save(self,path): 
@@ -120,3 +141,10 @@ class DarkBackground(object):
         obj.ROI = ROIMetrics(**obj.ROI)
         obj.parameters = DarkBackgroundParameters(**obj.parameters)
         return obj
+
+DarkBackgroundParameters = namedtuple('DarkBackgroundParameters', 
+    ['experiment', 
+    'maxshots', 
+    'run', 
+    'validityrange', 
+    'calibrationpath'])

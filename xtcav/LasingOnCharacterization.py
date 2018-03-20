@@ -19,10 +19,9 @@ import Constants
 from DarkBackground import *
 from LasingOffReference import *
 from CalibrationPaths import *
-from Metrics import *
 
 
-class ShotToShotCharacterization(object):
+class LasingOnCharacterization(object):
 
     """
     Class that can be used to reconstruct the full X-Ray power time profile for single or multiple bunches, relying on the presence of a dark background reference, and a lasing off reference. (See GenerateDarkBackground and Generate LasingOffReference for more information)
@@ -73,45 +72,50 @@ class ShotToShotCharacterization(object):
         self.calpath = calpath
         
         self._envset = False
+        self._calibrationsset = False
         if experiment and runs:
-            self.SetDataSource()
+            self._setDataSource()
+            
+        self._loadDarkReference()
+        self._loadLasingOffReference()
 
 
     def SetExperiment(self, experiment, runs):
         self.experiment = experiment
         self.runs = runs
-        self.SetDataSource()
+        self._setDataSource()
 
             
     def SetDataSource(self, datasource=None):
-        if datasource:
-            self.experiment = datasource.env().experiment()
-            self._datasource = psana.DataSource(datasource.env().jobName())
-        else:
-            self._datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
+        if not datasource:
+            datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
+        self._datasource = datasource
 
-        self.SetEnvironment()
-        self.LoadDarkReference()
-        self.LoadLasingOffReference()
-
-
-    def SetEnvironment(self):
         self._env = self._datasource.env()
         self._xtcav_camera = psana.Detector(Constants.SRC)
         self._ebeam_data = psana.Detector(Constants.EBEAM)
         self._gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
         self._ebeam = None
         self._gasdetector = None
-
-        self._currentrun = self._datasource.runs().next()
-
-        self._roixtcav, first_image = xtup.GetXTCAVImageROI(self._currentrun, self._xtcav_camera, start = self.start_image)
-        self._global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(self._currentrun, self._xtcav_camera, start=first_image)
-        self._saturation_value, self.start_image = xtup.GetCameraSaturationValue(self._currentrun, self._xtcav_camera, start=first_image)
+        
         self._envset = True
 
 
-    def LoadDarkReference(self):
+    def _setCalibrations(self, evt):
+        self._currentrun = evt.run()
+        if not self._darkreference:
+            self._loadDarkReference()
+        if not self._lasingoffreference:
+            self._loadLasingOffReference()
+
+        self._roixtcav = xtup.GetXTCAVImageROI(evt)
+        self._global_calibration = xtup.GetGlobalXTCAVCalibration(evt)
+        self._saturation_value = xtup.GetCameraSaturationValue(evt)
+        if self._roixtcav and self._global_calibration and self._saturation_value:
+            self._calibrationsset = True
+
+
+    def _loadDarkReference(self):
         """
         Method that loads the dark reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.    
         """
@@ -132,7 +136,7 @@ class ShotToShotCharacterization(object):
         self._darkreference = DarkBackground.load(self.darkreferencepath)
 
                 
-    def LoadLasingOffReference(self):
+    def _loadLasingOffReference(self):
         """
         Method that loads the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.
         """
@@ -148,14 +152,14 @@ class ShotToShotCharacterization(object):
             #If we could not find it, we load default parameters, and return False
             if not self.lasingoffreferencepath:
                 warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
-                self.LoadDefaultProcessingParameters()            
+                self._loadDefaultProcessingParameters()            
                 return
 
         self._lasingoffreference = LasingOffReference.load(self.lasingoffreferencepath)
-        self.LoadLasingOffReferenceParameters()
+        self._loadLasingOffReferenceParameters()
 
             
-    def LoadDefaultProcessingParameters(self):
+    def _loadDefaultProcessingParameters(self):
         """
         Method that sets some standard processing parameters in case they have not been explicitly set by the user and could not been retrieved from the lasing off reference. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.             
         """
@@ -177,7 +181,7 @@ class ShotToShotCharacterization(object):
             self.islandsplitpar2=5.0
 
 
-    def LoadLasingOffReferenceParameters(self):
+    def _loadLasingOffReferenceParameters(self):
         """
         Method that sets processing parameters from the lasing off reference in case they have not been explicitly set by the user (except for the number of bunches. That one is must match). This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.             
         """
@@ -202,49 +206,7 @@ class ShotToShotCharacterization(object):
             self.islandsplitpar2=self._lasingoffreference.parameters.islandsplitpar2 
 
                            
-    def processEvent(self,evt):
-        """
-        Args:
-            evt (psana event): relevant event to retrieve information from
-            
-        Returns:
-            True: All the input form detectors necessary for a good reconstruction are present in the event. 
-            False: The information from some detectors is missing for that event. It may still be possible to get information.
-        """
-        if not self._envset:
-            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
-            return 
-
-        img = self._xtcav_camera.image(evt)
-
-        if img is None: 
-            return False
-
-        self._rawimage = img
-        self._currentevent = evt
-        #Reset image results
-        self._pulse_characterization = None
-        self._image_profile = None
-        self._processed_image = None
-
-        self._ebeam = self._ebeam_data.get(evt)
-        self._gasdetector = self._gasdetector_data.get(evt)  
-
-        self.setImageProfile()
-        if not self._image_profile:
-            warnings.warn_explicit('Cannot create image profile',UserWarning,'XTCAV',0)
-            return False
-
-        if not self._lasingoffreference:
-            warnings.warn_explicit('Cannot perform analysis without lasing off reference',UserWarning,'XTCAV',0)
-            return False
-
-        #Using all the available data, perform the retrieval for that given shot        
-        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averaged_profiles) 
-        return True if self._pulse_characterization else False
-
-
-    def setImageProfile(self):
+    def _setImageProfile(self):
         """
         Method that runs the first step of the reconstruction, which consists of getting statistics from the XTCAV trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
         """
@@ -289,8 +251,55 @@ class ShotToShotCharacterization(object):
                 image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
                 
         #Save the results of the step 2
-        self._image_profile = ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
+        self._image_profile = xtu.ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
         self._processed_image = processed_image
+
+
+    def processEvent(self, evt):
+        """
+        Args:
+            evt (psana event): relevant event to retrieve information from
+            
+        Returns:
+            True: All the input form detectors necessary for a good reconstruction are present in the event. 
+            False: The information from some detectors is missing for that event. It may still be possible to get information.
+        """
+        if not self._envset:
+            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
+            return 
+       
+        img = self._xtcav_camera.image(evt)
+
+        if img is None: 
+            return False
+
+        if not self._calibrationsset:
+            self._setCalibrations(evt)
+            if not self._calibrationsset:
+                return False
+
+        self._rawimage = img
+        self._currentevent = evt
+        #Reset image results
+        self._pulse_characterization = None
+        self._image_profile = None
+        self._processed_image = None
+
+        self._ebeam = self._ebeam_data.get(evt)
+        self._gasdetector = self._gasdetector_data.get(evt)  
+
+        self._setImageProfile()
+        if not self._image_profile:
+            warnings.warn_explicit('Cannot create image profile',UserWarning,'XTCAV',0)
+            return False
+
+        if not self._lasingoffreference:
+            warnings.warn_explicit('Cannot perform analysis without lasing off reference',UserWarning,'XTCAV',0)
+            return False
+
+        #Using all the available data, perform the retrieval for that given shot        
+        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averaged_profiles) 
+        return True if self._pulse_characterization else False
 
         
     def GetPhysicalUnits(self):
@@ -311,6 +320,7 @@ class ShotToShotCharacterization(object):
         
         return self._image_profile.physical_units               
         
+
     def GetFullResults(self):
         """
         Method which returns a dictionary based list with the full results of the characterization

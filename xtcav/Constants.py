@@ -1,8 +1,21 @@
+"""
+Detector Names
+"""
 SRC = 'XrayTransportDiagnostic.0:Opal1000.0'
 CALIB_GROUP = 'Xtcav::CalibV1'
+ANALYSIS_VERSION = 'XTCAV_Analysis_Version'
 
 EBEAM = 'EBeam'
 GAS_DETECTOR = 'FEEGasDetEnergy'
+
+ROI_SIZE_X = 'XTCAV_ROI_sizeX'
+ROI_SIZE_Y = 'XTCAV_ROI_sizeY'
+ROI_START_X = 'XTCAV_ROI_startX'
+ROI_START_Y = 'XTCAV_ROI_startY'
+
+"""
+End Detector Names
+"""
 
 #Electron charge in coulombs
 E_CHARGE=1.60217657e-19 

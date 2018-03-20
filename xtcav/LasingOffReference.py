@@ -13,7 +13,6 @@ import Utils as xtu
 import UtilsPsana as xtup
 import SplittingUtils as su
 import Constants
-from Metrics import *
 from CalibrationPaths import *
 from DarkBackground import *
 from FileInterface import Load as constLoad
@@ -103,19 +102,18 @@ class LasingOffReference(object):
         run = dataSource.runs().next()
         env = dataSource.env()
 
-        roi_xtcav, first_image = xtup.GetXTCAVImageROI(run, xtcav_camera, start = self.parameters.start)
-        global_calibration, first_image = xtup.GetGlobalXTCAVCalibration(run, xtcav_camera, start=first_image)
-        saturation_value, first_image = xtup.GetCameraSaturationValue(run, xtcav_camera, start=first_image)
-
         dark_background = self._getDarkBackground(env)
 
-        num_processed = 0 #Counter for the total number of xtcav images processed within the run        
-        times = run.times()
+        #Calibration values needed to process images. first_event is the index of the first event with valid data
+        roi_xtcav, global_calibration, saturation_value, first_event = self._getCalibrationValues(run, xtcav_camera)
+
         #  Parallel Processing implementation by andr0s and polo5
         #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
         #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
-        image_numbers = xtup.DivideImageTasks(first_image, len(times), rank, size)
+        times = run.times()
+        image_numbers = xtup.DivideImageTasks(first_event, len(times), rank, size)
 
+        num_processed = 0 #Counter for the total number of xtcav images processed within the run  
         for t in image_numbers: 
             evt = run.event(times[t])
             image_profile = self._getImageProfile(evt, dark_background, xtcav_camera, global_calibration, 
@@ -198,15 +196,15 @@ class LasingOffReference(object):
             return 
 
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img, ROI = xtu.SubtractBackground(img, roi_xtcav, dark_background)  
+        img, roi = xtu.SubtractBackground(img, roi_xtcav, dark_background)  
 
         img, contains_data = xtu.DenoiseImage(img, self.parameters.medianfilter, self.parameters.snrfilter)                    #Remove noise from the image and normalize it
         if not contains_data:                                        #If there is nothing in the image we skip the event  
             return 
 
-        img, ROI = xtu.FindROI(img, ROI, self.parameters.roiwaistthres, self.parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if ROI.xN < 3 or ROI.yN < 3:
-            print 'ROI too small', ROI.xN, ROI.yN
+        img, roi = xtu.FindROI(img, roi, self.parameters.roiwaistthres, self.parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        if roi.xN < 3 or roi.yN < 3:
+            print 'ROI too small', roi.xN, roi.yN
             return 
 
         img = su.SplitImage(img, self.parameters.num_bunches, self.parameters.islandsplitmethod, 
@@ -218,9 +216,9 @@ class LasingOffReference(object):
         if self.parameters.num_bunches != num_bunches_found:
             return 
 
-        image_stats = xtu.ProcessXTCAVImage(img,ROI)          #Obtain the different properties and profiles from the trace               
+        image_stats = xtu.ProcessXTCAVImage(img,roi)          #Obtain the different properties and profiles from the trace               
 
-        physical_units = xtu.CalculatePhyscialUnits(ROI,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
+        physical_units = xtu.CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
         if not physical_units.valid:
             return 
 
@@ -232,7 +230,7 @@ class LasingOffReference(object):
                 image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
                 image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
 
-        return ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
+        return xtu.ImageProfile(image_stats, roi, shot_to_shot, physical_units)
 
 
     def _getDarkBackground(self, env):
@@ -249,6 +247,32 @@ class LasingOffReference(object):
             self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
         return DarkBackground.load(self.parameters.darkreferencepath)
 
+
+    @staticmethod
+    def _getCalibrationValues(run, xtcav_camera):
+        roi_xtcav, global_calibration, saturation_value = None, None, None
+        times = run.times()
+
+        end_of_images = len(times)
+        for t in range(end_of_images):
+            evt = run.event(times[t])
+            img = xtcav_camera.image(evt)
+            # skip if empty image
+            if img is None: 
+                continue
+
+            roi_xtcav = xtup.GetXTCAVImageROI(evt)
+            global_calibration = xtup.GetGlobalXTCAVCalibration(evt)
+            saturation_value = xtup.GetCameraSaturationValue(evt)
+
+            if not roi_xtcav or not global_calibration or not saturation_value:
+                continue
+
+            return roi_xtcav, global_calibration, saturation_value, t
+
+        return roi_xtcav, global_calibration, saturation_value, end_of_images
+
+
     def save(self, path):
 
         ###Move this to file interface folder...
@@ -261,5 +285,26 @@ class LasingOffReference(object):
     def load(path):
         lor = constLoad(path)
         lor.parameters = LasingOffParameters(**lor.parameters)
-        lor.averaged_profiles = AveragedProfiles(**lor.averaged_profiles)
+        lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
         return lor
+
+
+LasingOffParameters = xtu.namedtuple('LasingOffParameters', 
+    ['experiment', 
+    'maxshots', 
+    'run', 
+    'start',
+    'validityrange', 
+    'darkreferencepath', 
+    'num_bunches', 
+    'groupsize', 
+    'medianfilter', 
+    'snrfilter', 
+    'roiwaistthres', 
+    'roiexpand', 
+    'islandsplitmethod',
+    'islandsplitpar1', 
+    'islandsplitpar2', 
+    'calpath', 
+    'version'])
+
