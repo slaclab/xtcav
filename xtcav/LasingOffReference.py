@@ -116,13 +116,23 @@ class LasingOffReference(object):
         num_processed = 0 #Counter for the total number of xtcav images processed within the run  
         for t in image_numbers: 
             evt = run.event(times[t])
-            image_profile = self._getImageProfile(evt, dark_background, xtcav_camera, global_calibration, 
-                                                    saturation_value, roi_xtcav, ebeam_data, gasdetector_data)
+            ebeam = ebeam_data.get(evt)
+            gasdetector = gasdetector_data.get(evt)
+
+            shot_to_shot = xtup.GetShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        
+            if not shot_to_shot.valid: #If the information is not good, we skip the event
+                continue 
+
+            img = xtcav_camera.image(evt)
+            image_profile = xtu.processImage(img, self.parameters, dark_background, global_calibration, 
+                                                    saturation_value, roi_xtcav, shot_to_shot)
 
             if not image_profile:
                 continue
-                                                                                                                                                                                    
-            list_image_profiles.append(image_profile)     
+            
+            #Append only image profile, omit processed image                                                                                                                                                              
+            list_image_profiles.append(image_profile[0])     
             num_processed += 1
 
             self._printProgressStatements(num_processed)
@@ -165,72 +175,6 @@ class LasingOffReference(object):
             extrainfo = '\r' if size == 1 else '\nCore %d: '%(rank + 1)
             sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(num_processed) / np.ceil(self.parameters.maxshots/float(size)) *100, num_processed, np.ceil(self.parameters.maxshots/float(size))))
             sys.stdout.flush()
-
-        
-    def _getImageProfile(self, evt, dark_background, xtcav_camera, global_calibration, 
-        saturation_value, roi_xtcav, ebeam_data, gasdetector_data):
-        """
-        Run decomposition algorithms on xtcav image. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally
-
-        Returns:
-            image_stats
-            roi
-            shot_to_shot
-            physical_units
-        """
-
-        img = xtcav_camera.image(evt)
-        # skip if empty image or saturated
-        if img is None: 
-            return
-
-        if np.max(img) >= saturation_value:
-            warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
-            return 
-
-        ebeam = ebeam_data.get(evt)
-        gasdetector = gasdetector_data.get(evt)
-
-        shot_to_shot = xtup.GetShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
-        if not shot_to_shot.valid: #If the information is not good, we skip the event
-            return 
-
-        #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img, roi = xtu.SubtractBackground(img, roi_xtcav, dark_background)  
-
-        img, contains_data = xtu.DenoiseImage(img, self.parameters.medianfilter, self.parameters.snrfilter)                    #Remove noise from the image and normalize it
-        if not contains_data:                                        #If there is nothing in the image we skip the event  
-            return 
-
-        img, roi = xtu.FindROI(img, roi, self.parameters.roiwaistthres, self.parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if roi.xN < 3 or roi.yN < 3:
-            print 'ROI too small', roi.xN, roi.yN
-            return 
-
-        img = su.SplitImage(img, self.parameters.num_bunches, self.parameters.islandsplitmethod, 
-            self.parameters.islandsplitpar1, self.parameters.islandsplitpar2)#new
-
-        #self.p_img = img
-
-        num_bunches_found = img.shape[0]
-        if self.parameters.num_bunches != num_bunches_found:
-            return 
-
-        image_stats = xtu.ProcessXTCAVImage(img,roi)          #Obtain the different properties and profiles from the trace               
-
-        physical_units = xtu.CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
-        if not physical_units.valid:
-            return 
-
-        #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
-        if physical_units.xfsPerPix < 0:
-            physical_units = physical_units._replace(xfs = physical_units.xfs[::-1])
-            for j in range(num_bunches_found):
-                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1])
-                image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
-                image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
-
-        return xtu.ImageProfile(image_stats, roi, shot_to_shot, physical_units)
 
 
     def _getDarkBackground(self, env):

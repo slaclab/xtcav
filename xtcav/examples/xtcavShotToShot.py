@@ -24,7 +24,7 @@ for run in data_source.runs():
         agreement = XTCAVRetrieval.ReconstructionAgreement()
         pulse = XTCAVRetrieval.PulseDelay()
         print 'Agreement: %g%% Maximum power: %g GW Pulse Delay: %g ' %(agreement*100,np.amax(power), pulse[0])
-        image = XTCAVRetrieval.ProcessedXTCAVImage()
+        #image = XTCAVRetrieval.RawXTCAVImage()
         #np.save("test_img", image)
         n_r += 1            
 

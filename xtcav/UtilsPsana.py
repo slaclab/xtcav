@@ -23,12 +23,13 @@ def GetGlobalXTCAVCalibration(evt):
       globalCalibration: struct with the parameters
       ok: if all the data was retrieved correctly
     """
-    umperpix=psana.Detector('XTCAV_calib_umPerPx')
-    strstrength=psana.Detector('XTCAV_strength_par_S')
-    rfampcalib=psana.Detector('XTCAV_Amp_Des_calib_MV')
-    rfphasecalib=psana.Detector('XTCAV_Phas_Des_calib_deg')
-    dumpe=psana.Detector('XTCAV_Beam_energy_dump_GeV')
-    dumpdisp=psana.Detector('XTCAV_calib_disp_posToEnergy')
+    umperpix = psana.Detector('XTCAV_calib_umPerPx')
+    strstrength = psana.Detector('XTCAV_strength_par_S')
+    rfampcalib = psana.Detector('XTCAV_Amp_Des_calib_MV')
+    rfphasecalib = psana.Detector('XTCAV_Phas_Des_calib_deg')
+    dumpe = psana.Detector('XTCAV_Beam_energy_dump_GeV')
+    dumpdisp = psana.Detector('XTCAV_calib_disp_posToEnergy')
+
     global_calibration = GlobalCalibration(
         umperpix=umperpix(evt), 
         strstrength=strstrength(evt), 
@@ -77,29 +78,28 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
     unixtime = int((sec<<32)|nsec)
     fiducial = evt_id.fiducials()
  
-    shot_to_shot = ShotToShotParameters(unixtime = unixtime, fiducial = fiducial)
-
     if ebeam:    
         ebeamcharge=ebeam.ebeamCharge()
         xtcavrfamp=ebeam.ebeamXTCAVAmpl()
         xtcavrfphase=ebeam.ebeamXTCAVPhase()
-        dumpecharge=ebeam.ebeamDumpCharge()*Constants.E_CHARGE #In C  
-        shot_to_shot = shot_to_shot._replace(ebeamcharge = ebeamcharge, 
-            xtcavrfphase = xtcavrfphase, xtcavrfamp = xtcavrfamp, dumpecharge = dumpecharge)      
+        dumpecharge=ebeam.ebeamDumpCharge()*Constants.E_CHARGE #In C 
+        
+        if gasdetector:
+            energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2 
+            return ShotToShotParameters(ebeamcharge = ebeamcharge, 
+                xtcavrfphase = xtcavrfphase, xtcavrfamp = xtcavrfamp, 
+                dumpecharge = dumpecharge, xrayenergy = 1e-3*energydetector, 
+                unixtime = unixtime, fiducial = fiducial)     
+        else:   #Some hardcoded values
+            energydetector = Constants.ENERGY_DETECTOR
+            warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
+                
     else:    
         warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
-        shot_to_shot = shot_to_shot._replace(valid = 0)
+    
+    return ShotToShotParameters(unixtime = unixtime, fiducial = fiducial, 
+        xrayenergy = 1e-3*energydetector,  valid = 0)
         
-    if gasdetector:
-        energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2    
-    else:   #Some hardcoded values
-        energydetector = Constants.ENERGY_DETECTOR
-        warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
-        shot_to_shot = shot_to_shot._replace(valid = 0) 
-
-    shot_to_shot = shot_to_shot._replace(xrayenergy = 1e-3*energydetector)
-
-    return shot_to_shot
 
 
 def DivideImageTasks(first_image, last_image, rank, size):

@@ -6,7 +6,7 @@ import scipy.interpolate
 #import scipy.stats.mstats 
 import time
 import warnings
-import scipy.ndimage as im 
+import cv2
 import scipy.io
 import math
 import cv2
@@ -14,6 +14,7 @@ import Constants
 from sklearn.cluster import AgglomerativeClustering
 from sklearn import metrics
 import collections
+import SplittingUtils as su
 
 
 def ProcessXTCAVImage(image,ROI):
@@ -74,7 +75,7 @@ def SubtractBackground(image, ROI, dark_background):
         maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0    
         image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
        
-    return image,ROI
+    return image
 
     
 def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
@@ -88,38 +89,39 @@ def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
       image: filtered image
       contains_data: true if there is something in the image
     """
-    contains_data = True
-    #Applying the median filter
-    if filter.lower() == "gaussian":
-        image = im.gaussian_filter(image, sigma = 1)
-    else:
-        image = im.median_filter(image, medianfilter)
+    #Applying the gaussian filter
+    filtered = cv2.GaussianBlur(image, (11, 11), 0)
 
-    if np.sum(image) <= 0:
+    if np.sum(filtered) <= 0:
         warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
-        return image, False
+        return 
     
     #Obtaining the mean and the standard deviation of the noise by using pixels only on the border
-    mean=np.mean(image[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER]);
-    std=np.std(image[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER]);
-    
-    #Subtracting the mean of the noise
-    image = image - mean
-    
-    #Setting a threshold equal to signal to noise ratio times the standard deviation
-    thres=snrfilter*std    
-    image[image < thres] = 0 
-    if np.sum(image) > 0:
-        #We make sure it is not just noise by checking that at least .1% of pixels are not empty
-        if float(np.count_nonzero(image))/np.size(image) < 0.001: 
-            warnings.warn_explicit('< 0.1%% of pixels are non-zero after denoising. Image will not be used',UserWarning,'XTCAV',0)
-            return image, False
-        image=image/np.sum(image)
-    else:
+    mean = np.mean(filtered[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER])
+    std = np.std(filtered[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER])
+
+    #Create a mask for the true image that allows us to zero out all noise portions of image
+    mask = cv2.threshold(filtered.astype(np.float32), mean + snrfilter*std, 1, cv2.THRESH_BINARY)[1]
+    if np.sum(mask) == 0:
         warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
-        return image, False      
+        return 
+     #We make sure it is not just noise by checking that at least .1% of pixels are not empty
+    if float(np.count_nonzero(mask))/np.size(mask) < 0.001: 
+        warnings.warn_explicit('< 0.1%% of pixels are non-zero after denoising. Image will not be used',UserWarning,'XTCAV',0)
+        return  
     
-    return image, contains_data
+    return mask, mean
+
+def CropImage(img, mask, roi):
+    croppedimg = img[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
+    #np.save("test_img_u", img)
+    croppedimg[np.logical_or(mask == 0, croppedimg < 0)] = 0
+    #img = np.multiply(mask, croppedimg)
+    #print np.sum(img)
+    croppedimg = croppedimg/np.sum(croppedimg)
+    np.save("test_img", croppedimg)
+    #print np.sum(img)
+    return croppedimg
 
 
 def FindROI(image,ROI,threshold,expandfactor):
@@ -139,30 +141,29 @@ def FindROI(image,ROI,threshold,expandfactor):
     profileX=image.sum(0)
     profileY=image.sum(1)
     
-    maxpos=np.argmax(profileX);                             #Position of the maximum
-    thres=profileX[maxpos]*threshold;                       #Threshold value
-    overthreshold=np.nonzero(profileX>=thres)[0];           #Indices that correspond to values higher than the threshold
-    center=(overthreshold[0]+overthreshold[-1])/2;          #Middle position between the first value and the last value higher than th threshold
-    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor;  #Total width after applying the expand factor
+    maxpos=np.argmax(profileX)                             #Position of the maximum
+    thres=profileX[maxpos]*threshold                       #Threshold value
+    overthreshold=np.nonzero(profileX>=thres)[0]           #Indices that correspond to values higher than the threshold
+    center=(overthreshold[0]+overthreshold[-1])/2          #Middle position between the first value and the last value higher than th threshold
+    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor  #Total width after applying the expand factor
     ind1X=np.round(center-width/2).astype(np.int)                         #Index on the left side form the center
     ind2X=np.round(center+width/2).astype(np.int)                         #Index on the right side form the center
-    ind1X=np.amax([0,ind1X]).astype(np.int)                                #Check that the index is not too negative
-    ind2X=np.amin([profileX.size,ind2X]).astype(np.int)                    #Check that the index is not too high
+    ind1X=max(0,ind1X)                                #Check that the index is not too negative
+    ind2X=min(profileX.size,ind2X)                    #Check that the index is not too high
     
     #Same for y
     maxpos=np.argmax(profileY);
     thres=profileY[maxpos]*threshold;
-    overthreshold=np.nonzero(profileY>=thres)[0];
-    center=(overthreshold[0]+overthreshold[-1])/2;
-    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor;
+    overthreshold=np.nonzero(profileY>=thres)[0]
+    center=(overthreshold[0]+overthreshold[-1])/2
+    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor
     ind1Y = np.round(center-width/2).astype(np.int)
     ind2Y = np.round(center+width/2).astype(np.int)
-    ind1Y = np.amax([0,ind1Y]).astype(np.int)
-    ind2Y = np.amin([profileY.size,ind2Y]).astype(np.int)
+    ind1Y = max(0, ind1Y)
+    ind2Y = min(profileY.size, ind2Y)
    
     #Cropping the image using the calculated indices
-    cropped=np.zeros((ind2Y-ind1Y,ind2X-ind1X))
-    cropped[:,:]=image[ind1Y:ind2Y,ind1X:ind2X]
+    cropped = image[ind1Y:ind2Y,ind1X:ind2X]
                 
     #Output ROI in terms of the input ROI            
     outROI = ROIMetrics(ind2X-ind1X+1, 
@@ -217,7 +218,7 @@ def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     cosphasediff=math.cos((global_calibration.rfphasecalib-shot_to_shot.xtcavrfphase)*math.pi/180)
 
     #If the cosine of phase was too close to 0, we return warning and error
-    if np.abs(cosphasediff)<0.5:
+    if np.abs(cosphasediff) < 0.5:
         warnings.warn_explicit('The phase of the bunch with the RF field is far from 0 or 180 degrees',UserWarning,'XTCAV',0)
         valid=0
 
@@ -229,6 +230,61 @@ def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     yMeV=yMeVPerPix*(ROI.y-center[1])                #y axis in MeV around the center of mass
 
     return PhysicalUnits(xfs, yMeV, xfsPerPix, yMeVPerPix, valid)
+
+
+def processImage(img, parameters, dark_background, global_calibration, 
+        saturation_value, roi, shot_to_shot):
+        """
+        Run decomposition algorithms on xtcav image. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally
+
+        Returns:
+            ImageProfile ( image_stats,  roi, shot_to_shot, physical_units)
+            processed image
+        """
+        # skip if empty image or saturated
+        if img is None: 
+            return
+
+        if np.max(img) >= saturation_value:
+            warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
+            return 
+
+        #Subtract the dark background, taking into account properly possible different ROIs, if it is available
+        img = SubtractBackground(img, roi, dark_background)  
+
+        mask, mean = DenoiseImage(img, parameters.medianfilter, parameters.snrfilter)                    #Remove noise from the image and normalize it
+        if mask is None:                                        #If there is nothing in the image we skip the event  
+            return 
+
+        mask, roi = FindROI(mask, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        if roi.xN < 3 or roi.yN < 3:
+            print 'ROI too small', roi.xN, roi.yN
+            return 
+
+        final_img = CropImage(img, mask, roi)
+
+        processed_image = su.SplitImage(final_img, parameters.num_bunches, parameters.islandsplitmethod, 
+            parameters.islandsplitpar1, parameters.islandsplitpar2)#new
+
+        num_bunches_found = processed_image.shape[0]
+        if parameters.num_bunches != num_bunches_found:
+            return 
+
+        image_stats = ProcessXTCAVImage(processed_image,roi)          #Obtain the different properties and profiles from the trace               
+
+        physical_units = CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
+        if not physical_units.valid:
+            return 
+
+        #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
+        if physical_units.xfsPerPix < 0:
+            physical_units = physical_units._replace(xfs = physical_units.xfs[::-1])
+            for j in range(num_bunches_found):
+                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1])
+                image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
+                image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
+
+        return ImageProfile(image_stats, roi, shot_to_shot, physical_units), processed_image
 
 
 def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):

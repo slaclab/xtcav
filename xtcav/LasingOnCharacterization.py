@@ -75,7 +75,7 @@ class LasingOnCharacterization(object):
         self._calibrationsset = False
         if experiment and runs:
             self._setDataSource()
-            
+
         self._loadDarkReference()
         self._loadLasingOffReference()
 
@@ -123,7 +123,6 @@ class LasingOnCharacterization(object):
 
         if not self.darkreferencepath:
             if not self._envset:
-                #warnings.warn_explicit('Dark reference not loaded. Must set datasource or supply darkreferencepath',UserWarning,'XTCAV',0)
                 return 
 
             cp=CalibrationPaths(self._env, self.calpath)       
@@ -132,6 +131,7 @@ class LasingOnCharacterization(object):
             if not self.darkreferencepath:
                 warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
                 return    
+            print "Using file " + self.darkreferencepath.split("/")[-1] + " for dark reference"
         
         self._darkreference = DarkBackground.load(self.darkreferencepath)
 
@@ -146,7 +146,7 @@ class LasingOnCharacterization(object):
             if not self._envset:
                 #warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath',UserWarning, 'XTCAV',0)
                 return 
-            cp=CalibrationPaths(self._env,self.calpath)     
+            cp = CalibrationPaths(self._env, self.calpath)     
             self.lasingoffreferencepath = cp.findCalFileName('lasingoffreference',  self._currentrun)
             
             #If we could not find it, we load default parameters, and return False
@@ -154,6 +154,7 @@ class LasingOnCharacterization(object):
                 warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
                 self._loadDefaultProcessingParameters()            
                 return
+            print "Using file " + self.lasingoffreferencepath.split("/")[-1] + " for lasing off reference"
 
         self._lasingoffreference = LasingOffReference.load(self.lasingoffreferencepath)
         self._loadLasingOffReferenceParameters()
@@ -205,55 +206,6 @@ class LasingOnCharacterization(object):
         if not self.islandsplitpar2:        
             self.islandsplitpar2=self._lasingoffreference.parameters.islandsplitpar2 
 
-                           
-    def _setImageProfile(self):
-        """
-        Method that runs the first step of the reconstruction, which consists of getting statistics from the XTCAV trace. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally. 
-        """
-        if np.max(self._rawimage)>=self._saturation_value : #Detection if the image is saturated, we skip if it is
-            warnings.warn_explicit('Saturated Image. Skipping...',UserWarning,'XTCAV',0)
-            return
-
-        shot_to_shot = xtup.GetShotToShotParameters(self._ebeam, self._gasdetector, self._currentevent.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
-        if not shot_to_shot.valid: #If the information is not good, we skip the event
-            return                              
-        #Subtract the dark background, taking into account properly possible different ROIs
-        #Only if the reference is present
-        if self._darkreference:        
-            img, ROI = xtu.SubtractBackground(self._rawimage, self._roixtcav, self._darkreference)  
-        else:
-            ROI = self._roixtcav
-            img = self._rawimage
-            
-        img, contains_data = xtu.DenoiseImage(img, self.medianfilter, self.snrfilter)                    #Remove noise from the image and normalize it
-        if not contains_data:                                        #If there is nothing in the image we skip the event  
-            return 
-
-        img, ROI = xtu.FindROI(img, ROI, self.roiwaistthres, self.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if ROI.xN < Constants.MIN_ROI_SIZE or ROI.yN < Constants.MIN_ROI_SIZE:
-            print 'ROI too small',ROI.xN,ROI.yN
-            return 
-
-        processed_image = su.SplitImage(img, self.num_bunches, self.islandsplitmethod, self.islandsplitpar1, self.islandsplitpar2)
-
-        image_stats = xtu.ProcessXTCAVImage(processed_image, ROI)          #Obtain the different properties and profiles from the trace        
-        
-        physical_units = xtu.CalculatePhyscialUnits(ROI,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, self._global_calibration)   
-        if not physical_units.valid:
-            return 
-
-        #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles     
-        if physical_units.xfsPerPix < 0:
-            physical_units = physical_units._replace(xfs = physical_units.xfs[::-1])
-            for j in range(self._num_bunches):
-                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1])
-                image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
-                image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
-                
-        #Save the results of the step 2
-        self._image_profile = xtu.ImageProfile(image_stats, ROI, shot_to_shot, physical_units)
-        self._processed_image = processed_image
-
 
     def processEvent(self, evt):
         """
@@ -264,34 +216,41 @@ class LasingOnCharacterization(object):
             True: All the input form detectors necessary for a good reconstruction are present in the event. 
             False: The information from some detectors is missing for that event. It may still be possible to get information.
         """
+        self._currentevent = evt
+         #Reset image results
+        self._pulse_characterization = None
+        self._image_profile = None
+        self._processed_image = None
+
         if not self._envset:
             warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
             return 
-       
-        img = self._xtcav_camera.image(evt)
-
-        if img is None: 
-            return False
 
         if not self._calibrationsset:
             self._setCalibrations(evt)
             if not self._calibrationsset:
                 return False
 
-        self._rawimage = img
-        self._currentevent = evt
-        #Reset image results
-        self._pulse_characterization = None
-        self._image_profile = None
-        self._processed_image = None
-
         self._ebeam = self._ebeam_data.get(evt)
-        self._gasdetector = self._gasdetector_data.get(evt)  
+        self._gasdetector = self._gasdetector_data.get(evt)
 
-        self._setImageProfile()
-        if not self._image_profile:
+        shot_to_shot = xtup.GetShotToShotParameters(self._ebeam, self._gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        
+        if not shot_to_shot.valid: #If the information is not good, we skip the event
+            return False 
+       
+        self._rawimage = self._xtcav_camera.image(evt)
+
+        if self._rawimage is None: 
+            return False
+
+        process_results = xtu.processImage(self._rawimage, self._lasingoffreference.parameters, self._darkreference, self._global_calibration, 
+                                                    self._saturation_value, self._roixtcav, shot_to_shot)
+        if not process_results:
             warnings.warn_explicit('Cannot create image profile',UserWarning,'XTCAV',0)
             return False
+
+        self._image_profile, self._processed_image = process_results
 
         if not self._lasingoffreference:
             warnings.warn_explicit('Cannot perform analysis without lasing off reference',UserWarning,'XTCAV',0)
@@ -387,6 +346,7 @@ class LasingOnCharacterization(object):
                 fit=np.polyfit(t[central-2:central+3],power[central-2:central+3],2)
                 peakpos[j]=-fit[1]/(2*fit[0])
             except:
+                print "here"
                 return None 
             
         return peakpos
@@ -665,7 +625,21 @@ class LasingOnCharacterization(object):
             return self._rawimage
           
         return self._processed_image
-        
+
+
+    def RawXTCAVImage(self):
+        """
+        Method which returns the processed XTCAV image after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
+
+        Returns: 
+            3D array where the first index is bunch number, and the other two are the image.
+        """     
+        if self._rawimage is None:
+            warnings.warn_explicit('Image not processed for current event due to issues with image. ' +\
+                'Returning raw image',UserWarning,'XTCAV',0)
+        return self._rawimage
+          
+
     def ProcessedXTCAVImageROI(self):    
         """
         Method which returns the position of the processed XTCAV image within the whole CCD after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
@@ -691,5 +665,19 @@ class LasingOnCharacterization(object):
                 'Cannot calculate reconstruction agreement',UserWarning,'XTCAV',0)
             return 0
                        
-        return np.mean(self._pulse_characterization.powerAgreement)     
+        return np.mean(self._pulse_characterization.powerAgreement)  
+
+LasingOnParameters = xtu.namedtuple('LasingOnParameters', 
+    ['darkreferencepath',
+    'lasingoffreferencepath',
+    'num_bunches', 
+    'medianfilter', 
+    'snrfilter', 
+    'roiwaistthres', 
+    'roiexpand', 
+    'islandsplitmethod',
+    'islandsplitpar1', 
+    'islandsplitpar2', 
+    'calpath', 
+    'version'])   
         
