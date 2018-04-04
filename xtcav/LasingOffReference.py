@@ -54,7 +54,7 @@ class LasingOffReference(object):
             validityrange=None,
             darkreferencepath=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
-            groupsize=5 ,           #Number of profiles to average together
+            groupsize=0 ,           #Number of profiles to average together
             medianfilter=3,         #Number of neighbours for median filter in algorithm
             snrfilter=10,           #Number of sigmas for the noise threshold
             roiwaistthres=0.2,      #Parameter for the roi location
