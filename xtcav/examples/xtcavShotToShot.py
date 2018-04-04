@@ -11,7 +11,7 @@ XTCAVRetrieval=LasingOnCharacterization(lasingoffreferencepath="/reg/d/psdm/AMO/
 #Process individual events
 data_source = psana.DataSource("exp=%s:run=%s:idx" % (experiment, runs))
 
-XTCAVRetrieval.SetDataSource(data_source)
+XTCAVRetrieval.setDataSource(data_source)
 for run in data_source.runs():
     n_r=0  #Counter for the total number of xtcav images processed within the run       
     times = run.times()
@@ -20,9 +20,9 @@ for run in data_source.runs():
         if not XTCAVRetrieval.processEvent(evt):
             continue
 
-        t, power = XTCAVRetrieval.XRayPower()  
-        agreement = XTCAVRetrieval.ReconstructionAgreement()
-        pulse = XTCAVRetrieval.PulseDelay()
+        t, power = XTCAVRetrieval.xRayPower()  
+        agreement = XTCAVRetrieval.reconstructionAgreement()
+        pulse = XTCAVRetrieval.pulseDelay()
         print 'Agreement: %g%% Maximum power: %g GW Pulse Delay: %g ' %(agreement*100,np.amax(power), pulse[0])
         #image = XTCAVRetrieval.RawXTCAVImage()
         #np.save("test_img", image)

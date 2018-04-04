@@ -228,8 +228,13 @@ class LasingOffReference(object):
     @staticmethod
     def load(path):
         lor = constLoad(path)
-        lor.parameters = LasingOffParameters(**lor.parameters)
-        lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
+        try:
+            lor.parameters = LasingOffParameters(**lor.parameters)
+            lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
+        except TypeError:
+            print "Could not load Lasing Off Reference with path "+ path+". Try recreating lasing off " +\
+            "reference to ensure compatability between versions"
+            sys.exit(1)
         return lor
 
 

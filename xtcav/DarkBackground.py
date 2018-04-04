@@ -138,8 +138,13 @@ class DarkBackground(object):
     @staticmethod    
     def load(path):        
         obj = constLoad(path)
-        obj.ROI = ROIMetrics(**obj.ROI)
-        obj.parameters = DarkBackgroundParameters(**obj.parameters)
+        try:
+            obj.ROI = ROIMetrics(**obj.ROI)
+            obj.parameters = DarkBackgroundParameters(**obj.parameters)
+        except TypeError:
+            print "Could not load Dark Reference with path "+ path+". Try recreating dark reference " +\
+            "to ensure compatability between versions"
+            sys.exit(1)
         return obj
 
 DarkBackgroundParameters = namedtuple('DarkBackgroundParameters', 
