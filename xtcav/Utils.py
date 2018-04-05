@@ -127,7 +127,7 @@ def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
 
     if np.sum(filtered) <= 0:
         warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
-        return 
+        return None, None
     
     #Obtaining the mean and the standard deviation of the noise by using pixels only on the border
     mean = np.mean(filtered[0:Constants.SNR_BORDER,0:Constants.SNR_BORDER])
@@ -137,11 +137,11 @@ def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
     mask = cv2.threshold(filtered.astype(np.float32), mean + snrfilter*std, 1, cv2.THRESH_BINARY)[1]
     if np.sum(mask) == 0:
         warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
-        return 
+        return None, None
      #We make sure it is not just noise by checking that at least .1% of pixels are not empty
     if float(np.count_nonzero(mask))/np.size(mask) < 0.001: 
         warnings.warn_explicit('< 0.1%% of pixels are non-zero after denoising. Image will not be used',UserWarning,'XTCAV',0)
-        return  
+        return None, None
     
     return mask, mean
 
@@ -525,7 +525,7 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
             averageECurrent[j][g,:] = averageECurrent[j][g,:]/num_in_cluster
             averageECOMslice[j][g,:] = averageECOMslice[j][g,:]/num_in_cluster
             averageERMSslice[j][g,:] = averageERMSslice[j][g,:]/num_in_cluster
-            
+
     return AveragedProfiles(t, averageECurrent, averageECOMslice, 
         averageERMSslice, averageDistT, averageDistE, averageTRMS, 
         averageERMS, num_bunches, eventTime, eventFid)
@@ -624,6 +624,7 @@ ShotToShotParameters = namedtuple('ShotToShotParameters',
     'dumpecharge': Constants.DUMP_E_CHARGE,
     'xtcavrfphase': Constants.XTCAV_RFPHASE,
     'xtcavrfamp': Constants.XTCAV_RFAMP,
+    'xrayenergy': 1e-3*Constants.ENERGY_DETECTOR,
     'valid': 1}
     )
 

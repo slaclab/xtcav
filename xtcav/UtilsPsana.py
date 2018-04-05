@@ -77,6 +77,8 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
     nsec = time[1]
     unixtime = int((sec<<32)|nsec)
     fiducial = evt_id.fiducials()
+
+    energydetector = Constants.ENERGY_DETECTOR
  
     if ebeam:    
         ebeamcharge=ebeam.ebeamCharge()
@@ -91,14 +93,12 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
                 dumpecharge = dumpecharge, xrayenergy = 1e-3*energydetector, 
                 unixtime = unixtime, fiducial = fiducial)     
         else:   #Some hardcoded values
-            energydetector = Constants.ENERGY_DETECTOR
             warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
                 
     else:    
         warnings.warn_explicit('No ebeamv info',UserWarning,'XTCAV',0)
     
-    return ShotToShotParameters(unixtime = unixtime, fiducial = fiducial, 
-        xrayenergy = 1e-3*energydetector,  valid = 0)
+    return ShotToShotParameters(unixtime = unixtime, fiducial = fiducial, valid = 0)
         
 
 

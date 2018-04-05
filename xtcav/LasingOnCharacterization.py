@@ -79,19 +79,10 @@ class LasingOnCharacterization(object):
         self._loadDarkReference()
         self._loadLasingOffReference()
 
-
-    def setExperiment(self, experiment, runs):
-        self.experiment = experiment
-        self.runs = runs
-        self._setDataSource()
-
             
-    def setDataSource(self, datasource=None):
-        if not datasource:
-            datasource = psana.DataSource("exp=%s:run=%s:idx" % (self.experiment, self.runs))
-        self._datasource = datasource
+    def _setDataSource(self):
 
-        self._env = self._datasource.env()
+        self._env = psana.det_interface._getEnv()
         self._xtcav_camera = psana.Detector(Constants.SRC)
         self._ebeam_data = psana.Detector(Constants.EBEAM)
         self._gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
@@ -226,8 +217,9 @@ class LasingOnCharacterization(object):
         self._processed_image = None
 
         if not self._envset:
-            warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
-            return 
+            self._setDataSource()
+            #warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
+            #return 
 
         if not self._calibrationsset:
             self._setCalibrations(evt)
