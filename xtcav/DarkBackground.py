@@ -98,11 +98,13 @@ class DarkBackground(object):
         self.ROI=roi_xtcav
         
         if not self.parameters.validityrange:
-            self.parameters = self.parameters._replace(validityrange=[self.parameters.run, 'end'])
+            self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
+        elif type(test) == int:
+            self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
          
         if savetofile:
             cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
-            file = cp.newCalFileName('pedestals', self.parameters.validityrange[0], self.parameters.validityrange[1])
+            file = cp.newCalFileName(Constants.DB_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
 
     

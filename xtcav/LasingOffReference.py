@@ -55,7 +55,6 @@ class LasingOffReference(object):
             darkreferencepath=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
             groupsize=0 ,           #Number of profiles to average together
-            medianfilter=3,         #Number of neighbours for median filter in algorithm
             snrfilter=10,           #Number of sigmas for the noise threshold
             roiwaistthres=0.2,      #Parameter for the roi location
             roiexpand=2.5,          #Parameter for the roi location
@@ -68,7 +67,7 @@ class LasingOffReference(object):
         self.parameters = LasingOffParameters(experiment = experiment,
             maxshots = maxshots, run = run_number, start = start_image, validityrange = validityrange, 
             darkreferencepath = darkreferencepath, num_bunches = num_bunches, groupsize=groupsize, 
-            medianfilter=medianfilter, snrfilter=snrfilter, roiwaistthres=roiwaistthres,
+            snrfilter=snrfilter, roiwaistthres=roiwaistthres,
             roiexpand = roiexpand, islandsplitmethod=islandsplitmethod, islandsplitpar2 = islandsplitpar2,
             islandsplitpar1=islandsplitpar1, calpath=calpath, version=1)
 
@@ -125,14 +124,14 @@ class LasingOffReference(object):
                 continue 
 
             img = xtcav_camera.image(evt)
-            image_profile = xtu.processImage(img, self.parameters, dark_background, global_calibration, 
+            image_profile, processed_img = xtu.processImage(img, self.parameters, dark_background, global_calibration, 
                                                     saturation_value, roi_xtcav, shot_to_shot)
 
             if not image_profile:
                 continue
             
             #Append only image profile, omit processed image                                                                                                                                                              
-            list_image_profiles.append(image_profile[0])     
+            list_image_profiles.append(image_profile)     
             num_processed += 1
 
             self._printProgressStatements(num_processed)
@@ -153,19 +152,22 @@ class LasingOffReference(object):
         #Since there are 12 cores it is possible that there are more references than needed. In that case we discard some
         if len(image_profiles) > self.parameters.maxshots:
             image_profiles = image_profiles[0:self.parameters.maxshots]
-         
+        
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
         averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.groupsize);     
 
         self.averaged_profiles=averaged_profiles
         self.n=num_processed    
         
+        # Set validity range for reference runs
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
+        elif type(test) == int:
+            self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
 
         if savetofile:
             cp = CalibrationPaths(env, self.parameters.calpath)
-            file = cp.newCalFileName('lasingoffreference', self.parameters.validityrange[0], self.parameters.validityrange[1])
+            file = cp.newCalFileName(Constants.LOR_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
 
 
@@ -183,7 +185,7 @@ class LasingOffReference(object):
         """
         if not self.parameters.darkreferencepath:
             cp = CalibrationPaths(env, self.parameters.calpath)
-            darkreferencepath = cp.findCalFileName('pedestals', int(self.parameters.run))
+            darkreferencepath = cp.findCalFileName(Constants.DB_FILE_NAME, int(self.parameters.run))
             if not darkreferencepath:
                 print ('Dark reference for run %s not found, image will not be background substracted' % self.parameters.run)
                 return None
@@ -194,6 +196,14 @@ class LasingOffReference(object):
 
     @staticmethod
     def _getCalibrationValues(run, xtcav_camera):
+        """
+        Internal method. Sets calibration parameters for image processing
+        Returns:
+            roi: region of interest in image
+            global_calibration: global parameters of xtcav machine
+            saturation_value: value at which image is saturated and no longer valid
+            first_image: index of first valid shot in run
+        """
         roi_xtcav, global_calibration, saturation_value = None, None, None
         times = run.times()
 
@@ -247,7 +257,6 @@ LasingOffParameters = xtu.namedtuple('LasingOffParameters',
     'darkreferencepath', 
     'num_bunches', 
     'groupsize', 
-    'medianfilter', 
     'snrfilter', 
     'roiwaistthres', 
     'roiexpand', 

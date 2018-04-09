@@ -111,7 +111,7 @@ def SubtractBackground(image, ROI, dark_background):
     return image
 
     
-def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
+def DenoiseImage(image, snrfilter):
     """
     Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
     Arguments:
@@ -127,6 +127,7 @@ def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
 
     if np.sum(filtered) <= 0:
         warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
+        np.save("blank_img", image)
         return None, None
     
     #Obtaining the mean and the standard deviation of the noise by using pixels only on the border
@@ -142,7 +143,7 @@ def DenoiseImage(image,medianfilter,snrfilter, filter="Gaussian"):
     if float(np.count_nonzero(mask))/np.size(mask) < 0.001: 
         warnings.warn_explicit('< 0.1%% of pixels are non-zero after denoising. Image will not be used',UserWarning,'XTCAV',0)
         return None, None
-    
+
     return mask, mean
 
 def CropImage(img, mask, roi):
@@ -239,38 +240,38 @@ def processImage(img, parameters, dark_background, global_calibration,
         """
         # skip if empty image or saturated
         if img is None: 
-            return
+            return None, None
 
         if np.max(img) >= saturation_value:
             warnings.warn_explicit('Saturated Image',UserWarning,'XTCAV',0)
-            return 
+            return None, None
 
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img = SubtractBackground(img, roi, dark_background)  
+        img_db = SubtractBackground(img, roi, dark_background)  
 
-        mask, mean = DenoiseImage(img, parameters.medianfilter, parameters.snrfilter)                    #Remove noise from the image and normalize it
+        mask, mean = DenoiseImage(img_db, parameters.snrfilter)                    #Remove noise from the image and normalize it
         if mask is None:                                        #If there is nothing in the image we skip the event  
-            return 
+            return None, None
 
         mask, roi = FindROI(mask, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
         if roi.xN < 3 or roi.yN < 3:
             print 'ROI too small', roi.xN, roi.yN
-            return 
+            return None, None
 
-        final_img = CropImage(img, mask, roi)
+        final_img = CropImage(img_db, mask, roi)
 
         processed_image = su.SplitImage(final_img, parameters.num_bunches, parameters.islandsplitmethod, 
             parameters.islandsplitpar1, parameters.islandsplitpar2)#new
 
         num_bunches_found = processed_image.shape[0]
         if parameters.num_bunches != num_bunches_found:
-            return 
+            return None, None
 
         image_stats = ProcessXTCAVImage(processed_image,roi)          #Obtain the different properties and profiles from the trace               
 
         physical_units = CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
         if not physical_units.valid:
-            return 
+            return None, None
 
         #If the step in time is negative, we mirror the x axis to make it ascending and consequently mirror the profiles
         if physical_units.xfsPerPix < 0:

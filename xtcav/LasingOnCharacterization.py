@@ -27,7 +27,6 @@ class LasingOnCharacterization(object):
     Class that can be used to reconstruct the full X-Ray power time profile for single or multiple bunches, relying on the presence of a dark background reference, and a lasing off reference. (See GenerateDarkBackground and Generate LasingOffReference for more information)
     Attributes:
         calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
-        medianfilter (int): Number of neighbours for median filter (If not set, the value that was used for the lasing off reference will be used).
         snrfilter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
@@ -39,7 +38,6 @@ class LasingOnCharacterization(object):
         runs='',
         num_bunches = None,
         start_image = 0,
-        medianfilter = None,
         snrfilter = None,
         roiwaistthres = None,
         roiexpand = None,
@@ -59,7 +57,6 @@ class LasingOnCharacterization(object):
         self.runs = runs                            #Run numbers
         self.num_bunches = num_bunches              #Number of bunches
         self.start_image = start_image
-        self.medianfilter = medianfilter            #Number of neighbours for median filter
         self.snrfilter = snrfilter                  #Number of sigmas for the noise threshold
         self.roiwaistthres = roiwaistthres          #Parameter for the roi location
         self.roiexpand = roiexpand                  #Parameter for the roi location
@@ -105,8 +102,8 @@ class LasingOnCharacterization(object):
         if self._roixtcav and self._global_calibration and self._saturation_value:
             self._calibrationsset = True
 
-        self.parameters = LasingOnParameters(self.num_bunches, self.medianfilter, self.snrfilter,
-            self.roiwaistthres, self.roiexpand, self.islandsplitmethod, self.islandsplitpar1, self.islandsplitpar2 )
+        self.parameters = LasingOnParameters(self.num_bunches, self.snrfilter, self.roiwaistthres, 
+            self.roiexpand, self.islandsplitmethod, self.islandsplitpar1, self.islandsplitpar2 )
 
 
     def _loadDarkReference(self):
@@ -120,7 +117,7 @@ class LasingOnCharacterization(object):
                 return 
 
             cp=CalibrationPaths(self._env, self.calpath)       
-            self.darkreferencepath=cp.findCalFileName('pedestals', self._currentrun)
+            self.darkreferencepath=cp.findCalFileName(Constants.DB_FILE_NAME, self._currentrun)
             #If we could not find it, we just wont use it, and return False
             if not self.darkreferencepath:
                 warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
@@ -141,7 +138,7 @@ class LasingOnCharacterization(object):
                 #warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath',UserWarning, 'XTCAV',0)
                 return 
             cp = CalibrationPaths(self._env, self.calpath)     
-            self.lasingoffreferencepath = cp.findCalFileName('lasingoffreference',  self._currentrun)
+            self.lasingoffreferencepath = cp.findCalFileName(Constants.LOR_FILE_NAME,  self._currentrun)
             
             #If we could not find it, we load default parameters, and return False
             if not self.lasingoffreferencepath:
@@ -160,8 +157,6 @@ class LasingOnCharacterization(object):
         """
         if not self.num_bunches:
             self.num_bunches=1
-        if not self.medianfilter:
-            self.medianfilter=3
         if not self.snrfilter:
             self.snrfilter=10
         if not self.roiwaistthres:
@@ -169,7 +164,7 @@ class LasingOnCharacterization(object):
         if not self.roiexpand:
             self.roiexpand=2.5    
         if not self.islandsplitmethod:
-            self.islandsplitmethod='scipylabel'       
+            self.islandsplitmethod=Constants.DEFAULT_SPLIT_METHOD       
         if not self.islandsplitpar1:        
             self.islandsplitpar1=3.0
         if not self.islandsplitpar2:        
@@ -183,8 +178,6 @@ class LasingOnCharacterization(object):
         if self.num_bunches and self.num_bunches != self._lasingoffreference.parameters.num_bunches:
             warnings.warn_explicit('Number of bunches input (%d) differs from number of bunches found in lasing off reference (%d). Overwriting input value.' % (self.num_bunches,self._lasingoffreference.parameters.num_bunches) ,UserWarning,'XTCAV',0)
         self.num_bunches=self._lasingoffreference.parameters.num_bunches
-        if not self.medianfilter:
-            self.medianfilter=self._lasingoffreference.parameters.medianfilter
         if not self.snrfilter:
             self.snrfilter=self._lasingoffreference.parameters.snrfilter
         if not self.roiwaistthres:
@@ -664,7 +657,6 @@ class LasingOnCharacterization(object):
 
 LasingOnParameters = xtu.namedtuple('LasingOnParameters', 
     ['num_bunches', 
-    'medianfilter', 
     'snrfilter', 
     'roiwaistthres', 
     'roiexpand', 

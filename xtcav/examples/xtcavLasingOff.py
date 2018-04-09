@@ -5,6 +5,4 @@ lasing_off_reference = LasingOffReference(
 	run_number='131',
 	maxshots=100,
 	num_bunches=1)
-# Debugging
-# print np.sum(lasing_off_reference.averaged_profiles.eCOMslice[0][0])
 

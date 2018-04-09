@@ -30,3 +30,6 @@ SNR_BORDER=100 #number of pixels near the border that can be considered to conta
 MIN_ROI_SIZE=3 #minimum number of pixels defining region of interest
 
 DEFAULT_SPLIT_METHOD='scipyLabel'
+
+DB_FILE_NAME = 'pedestals'
+LOR_FILE_NAME = 'lasingoffreference'
