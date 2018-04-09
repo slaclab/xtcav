@@ -232,13 +232,11 @@ class LasingOnCharacterization(object):
         if self._rawimage is None: 
             return False
 
-        process_results = xtu.processImage(self._rawimage, self.parameters, self._darkreference, self._global_calibration, 
+        self._image_profile, self._processed_image =  xtu.processImage(self._rawimage, self.parameters, self._darkreference, self._global_calibration, 
                                                     self._saturation_value, self._roixtcav, shot_to_shot)
-        if not process_results:
+        if not self._image_profile:
             warnings.warn_explicit('Cannot create image profile',UserWarning,'XTCAV',0)
             return False
-
-        self._image_profile, self._processed_image = process_results
 
         if not self._lasingoffreference:
             warnings.warn_explicit('Cannot perform analysis without lasing off reference',UserWarning,'XTCAV',0)

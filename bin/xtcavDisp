@@ -11,18 +11,18 @@ xtcav = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds.env())
 gdet = Detector('FEEGasDetEnergy')
 
 def getLasingOffShot(XTCAVRetrieval,expt):
-    results=XTCAVRetrieval._eventresultsstep3
+    results=XTCAVRetrieval._pulse_characterization
     lor = XTCAVRetrieval._lasingoffreference
     ibunch = 0
 
-    group = results['groupnum'][ibunch]
-    profs = lor.averagedProfiles
+    group = results.groupnum[ibunch]
+    profs = lor.averaged_profiles
 
-    ds_lasingoff = DataSource('exp=%s:run=%d:idx'%(expt,lor.runs[0]))
+    ds_lasingoff = DataSource('exp=%s:run=%d:idx'%(expt,lor.run))
     run = ds_lasingoff.runs().next()
     times = run.times()
-    time = profs['eventTime'][ibunch][group]
-    fid = profs['eventFid'][ibunch][group]
+    time = profs.eventTime[ibunch][group]
+    fid = profs.eventFid[ibunch][group]
     et = EventTime(int(time),int(fid))
     evt_lasingoff = run.event(et)
     xtcav_lasingoff = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds_lasingoff.env())
@@ -32,23 +32,24 @@ def getLasingOffShot(XTCAVRetrieval,expt):
     return xtcav_lasingoff.raw(evt_lasingoff)
 
 import matplotlib.pyplot as plt
-from xtcav.ShotToShotCharacterization import *
-XTCAVRetrieval=ShotToShotCharacterization();
-XTCAVRetrieval.SetEnv(ds.env())
+from xtcav.LasingOnCharacterization import *
+XTCAVRetrieval=LasingOnCharacterization()
 for evt in ds.events():
-    raw = xtcav.raw(evt)
-    gd = gdet.get(evt)
-    if raw is None: continue
-    if gd is None: continue
-    if not XTCAVRetrieval.SetCurrentEvent(evt):
+    if not XTCAVRetrieval.processEvent(evt):
         continue
-    time,power,ok=XTCAVRetrieval.XRayPower() 
-    agreement,ok=XTCAVRetrieval.ReconstructionAgreement()
+    
+    time, power = XTCAVRetrieval.xRayPower() 
+    agreement = XTCAVRetrieval.reconstructionAgreement()
     print 'Agreement:',agreement,'OK:',ok,'Gasdet:',gd.f_11_ENRC()
-    if not ok or agreement<0.5: continue
-    results=XTCAVRetrieval._eventresultsstep3
+    
+    if agreement<0.5: 
+        continue
+
+    results=XTCAVRetrieval._pulse_characterization
 
     xtcav_lasingoff = getLasingOffShot(XTCAVRetrieval,ds.env().experiment())
+
+    raw = xtcav.raw(evt)
 
     plt.subplot(3,2,1)
     plt.title('Lasing On')
@@ -60,20 +61,20 @@ for evt in ds.events():
 
     plt.subplot(3,2,3)
     plt.title('Current')
-    plt.plot(time[0],results['lasingECurrent'][0],label='lasing')
-    plt.plot(time[0],results['nolasingECurrent'][0],label='nolasing')
+    plt.plot(time[0],results.lasingECurrent[0],label='lasing')
+    plt.plot(time[0],results.nolasingECurrent[0],label='nolasing')
     plt.legend()
 
     plt.subplot(3,2,4)
     plt.title('E (Delta)')
-    plt.plot(time[0],results['lasingECOM'][0],label='lasing')
-    plt.plot(time[0],results['nolasingECOM'][0],label='nolasing')
+    plt.plot(time[0],results.lasingECOM[0],label='lasing')
+    plt.plot(time[0],results.nolasingECOM[0],label='nolasing')
     plt.legend()
 
     plt.subplot(3,2,5)
     plt.title('E (Sigma)')
-    plt.plot(time[0],results['lasingERMS'][0],label='lasing')
-    plt.plot(time[0],results['nolasingERMS'][0],label='nolasing')
+    plt.plot(time[0],results.lasingERMS[0],label='lasing')
+    plt.plot(time[0],results.nolasingERMS[0],label='nolasing')
     plt.legend()
 
     plt.subplot(3,2,6)

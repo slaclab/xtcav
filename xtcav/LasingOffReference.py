@@ -104,7 +104,7 @@ class LasingOffReference(object):
         dark_background = self._getDarkBackground(env)
 
         #Calibration values needed to process images. first_event is the index of the first event with valid data
-        roi_xtcav, global_calibration, saturation_value, first_event = self._getCalibrationValues(run, xtcav_camera)
+        roi_xtcav, global_calibration, saturation_value, first_event = self._getCalibrationValues(run, xtcav_camera, start_image)
 
         #  Parallel Processing implementation by andr0s and polo5
         #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
@@ -195,7 +195,7 @@ class LasingOffReference(object):
 
 
     @staticmethod
-    def _getCalibrationValues(run, xtcav_camera):
+    def _getCalibrationValues(run, xtcav_camera, start_image):
         """
         Internal method. Sets calibration parameters for image processing
         Returns:
@@ -208,7 +208,7 @@ class LasingOffReference(object):
         times = run.times()
 
         end_of_images = len(times)
-        for t in range(end_of_images):
+        for t in range(start_image, end_of_images):
             evt = run.event(times[t])
             img = xtcav_camera.image(evt)
             # skip if empty image

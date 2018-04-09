@@ -14,7 +14,9 @@ from CalibrationPaths import *
 import Constants as Cn
 from Utils import namedtuple, ROIMetrics  
 """
-    Class that generates a dark background image for XTCAV reconstruction purposes
+    Class that generates a dark background image for XTCAV reconstruction purposes. Essentially takes valid
+    dark reference images and averages them to find the "average" camera background. It is recommended to use a 
+    large number of shots so that spikes in energy levels can get rounded out. 
     Arguments:
         experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
         run (str): String with a run number. E.g. '123' 
@@ -29,6 +31,7 @@ class DarkBackground(object):
         experiment='amoc8114', 
         maxshots=401, 
         run_number='86', 
+        start_image=0,
         validityrange=None, 
         calibrationpath='',
         savetofile=True):
@@ -67,7 +70,7 @@ class DarkBackground(object):
         n=0  #Counter for the total number of xtcav images processed 
         run = dataSource.runs().next()     
         
-        roi_xtcav, first_image = self._getCalibrationValues(run, xtcav_camera)
+        roi_xtcav, first_image = self._getCalibrationValues(run, xtcav_camera, start_image)
         accumulator_xtcav = np.zeros((roi_xtcav.yN, roi_xtcav.xN), dtype=np.float64)
         
         times = run.times()  
@@ -104,17 +107,17 @@ class DarkBackground(object):
          
         if savetofile:
             cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
-            file = cp.newCalFileName(Constants.DB_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
+            file = cp.newCalFileName(Cn.DB_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
             self.save(file)
 
     
     @staticmethod
-    def _getCalibrationValues(run, xtcav_camera):
+    def _getCalibrationValues(run, xtcav_camera, start_image):
         roi_xtcav = None
         times = run.times()
 
         end_of_images = len(times)
-        for t in range(end_of_images):
+        for t in range(start_image,end_of_images):
             evt = run.event(times[t])
             img = xtcav_camera.image(evt)
             # skip if empty image
