@@ -5,3 +5,5 @@ xtcav/LasingOff.py
 xtcav.egg-info
 *.npy
 *.pyc
+build/
+dist/

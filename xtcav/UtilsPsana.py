@@ -6,12 +6,14 @@ from Utils import ROIMetrics, GlobalCalibration, ShotToShotParameters
 import Constants
 
 def GetCameraSaturationValue(evt):
-    analysis_version = psana.Detector(Constants.ANALYSIS_VERSION)
+    try:
+        analysis_version = psana.Detector(Constants.ANALYSIS_VERSION)
+        if analysis_version(evt) is not None:
+            return (1<<12)-1
+    except:
+        pass
 
-    if analysis_version(evt) is not None:
-        return (1<<12)-1
-    else:
-        return (1<<14)-1
+    return (1<<14)-1
     
 
 def GetGlobalXTCAVCalibration(evt):
@@ -59,16 +61,14 @@ def GetXTCAVImageROI(evt):
     yN = roiYN(evt)  #Size of the image in Y 
     y0 = roiY(evt)    #Position of the first pixel in y
     
-    if xN is None:       
+    if not xN:       
         warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
         return None
         
     x = x0+np.arange(0, xN) 
     y = y0+np.arange(0, yN) 
 
-    ROI_XTCAV = ROIMetrics(xN, x0, yN, y0, x, y) 
-
-    return ROI_XTCAV
+    return ROIMetrics(xN, x0, yN, y0, x, y) 
 
 
 def GetShotToShotParameters(ebeam, gasdetector, evt_id):

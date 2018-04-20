@@ -230,6 +230,7 @@ class LasingOnCharacterization(object):
         self._rawimage = self._xtcav_camera.image(evt)
 
         if self._rawimage is None: 
+            warnings.warn_explicit('Could not retrieve image',UserWarning,'XTCAV',0)
             return False
 
         self._image_profile, self._processed_image =  xtu.processImage(self._rawimage, self.parameters, self._darkreference, self._global_calibration, 
@@ -513,6 +514,7 @@ class LasingOnCharacterization(object):
         B = ( x3**2.0 * (y1-y2) + x2**2.0 * (y3-y1) + x1**2.0 * (y2-y3) ) / d
         return -1*B / (2*A)
 
+
     def electronCurrentPerBunch(self):    
         """
         Method which returns the electron current per bunch. A lasing off reference is not necessary for this retrieval.
@@ -638,6 +640,21 @@ class LasingOnCharacterization(object):
             return None
             
         return self._image_profile.roi
+
+
+    def processedXTCAVImageProfile(self):    
+        """
+        Method which returns the position of the processed XTCAV image within the whole CCD after background subtraction, noise removal, region of interest cropping and multiple bunch separation. This does not require a lasing off reference.
+
+        Returns: 
+            Dictionary with the region of interest parameters.
+        """     
+        if self._image_profile is None:
+            warnings.warn_explicit('Image profile not created for current event due to issues with image.',UserWarning,'XTCAV',0)
+            return None
+            
+        return self._image_profile
+
         
     def reconstructionAgreement(self): 
         """

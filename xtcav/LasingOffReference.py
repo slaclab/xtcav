@@ -38,7 +38,7 @@ size = comm.Get_size()
         num_bunches (int): Number of bunches.
         medianfilter (int): Number of neighbours for median filter.
         snrfilter (float): Number of sigmas for the noise threshold.
-        groupsize (int): Number of profiles to average together for each reference.
+        num_groups (int): Number of profiles to average together for each reference.
         roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
         roiexpand (float): number of waists that the region of interest around will span around the center of the trace.
         islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
@@ -54,10 +54,10 @@ class LasingOffReference(object):
             validityrange=None,
             darkreferencepath=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
-            groupsize=0 ,           #Number of profiles to average together
+            num_groups=0,        #Number of profiles to average together
             snrfilter=10,           #Number of sigmas for the noise threshold
             roiwaistthres=0.2,      #Parameter for the roi location
-            roiexpand=2.5,          #Parameter for the roi location
+            roiexpand=1.5,          #Parameter for the roi location
             islandsplitmethod = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
             islandsplitpar1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
             islandsplitpar2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
@@ -66,7 +66,7 @@ class LasingOffReference(object):
 
         self.parameters = LasingOffParameters(experiment = experiment,
             maxshots = maxshots, run = run_number, start = start_image, validityrange = validityrange, 
-            darkreferencepath = darkreferencepath, num_bunches = num_bunches, groupsize=groupsize, 
+            darkreferencepath = darkreferencepath, num_bunches = num_bunches, num_groups=num_groups, 
             snrfilter=snrfilter, roiwaistthres=roiwaistthres,
             roiexpand = roiexpand, islandsplitmethod=islandsplitmethod, islandsplitpar2 = islandsplitpar2,
             islandsplitpar1=islandsplitpar1, calpath=calpath, version=1)
@@ -113,6 +113,7 @@ class LasingOffReference(object):
         image_numbers = xtup.DivideImageTasks(first_event, len(times), rank, size)
 
         num_processed = 0 #Counter for the total number of xtcav images processed within the run  
+        arr = []
         for t in image_numbers: 
             evt = run.event(times[t])
             ebeam = ebeam_data.get(evt)
@@ -129,6 +130,7 @@ class LasingOffReference(object):
 
             if not image_profile:
                 continue
+            arr.append(processed_img[0])
             
             #Append only image profile, omit processed image                                                                                                                                                              
             list_image_profiles.append(image_profile)     
@@ -154,15 +156,16 @@ class LasingOffReference(object):
             image_profiles = image_profiles[0:self.parameters.maxshots]
         
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
-        averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.groupsize);     
+        averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
 
+        np.save("test_profiles", arr)
         self.averaged_profiles=averaged_profiles
         self.n=num_processed    
         
         # Set validity range for reference runs
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
-        elif type(test) == int:
+        elif type(self.parameters.validityrange) == int:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
 
         if savetofile:
@@ -256,7 +259,7 @@ LasingOffParameters = xtu.namedtuple('LasingOffParameters',
     'validityrange', 
     'darkreferencepath', 
     'num_bunches', 
-    'groupsize', 
+    'num_groups', 
     'snrfilter', 
     'roiwaistthres', 
     'roiexpand', 

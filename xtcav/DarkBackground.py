@@ -94,15 +94,15 @@ class DarkBackground(object):
                 sys.stdout.write('\r%.1f %% done, %d / %d' % (float(n) / self.parameters.maxshots*100, n, self.parameters.maxshots ))
                 sys.stdout.flush()   
             if n >= self.parameters.maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
-                sys.stdout.write('\n')
                 break                          
-        #At the end of the program the total accumulator is saved  
+        #At the end of the program the total accumulator is saved 
+        sys.stdout.write('\nMaximum number of images processed\n') 
         self.image=accumulator_xtcav/n
         self.ROI=roi_xtcav
         
         if not self.parameters.validityrange:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
-        elif type(test) == int:
+        elif type(self.parameters.validityrange) == int:
             self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
          
         if savetofile:

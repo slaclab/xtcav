@@ -16,6 +16,8 @@ from sklearn import metrics
 import collections
 import SplittingUtils as su
 
+import scipy.ndimage as im 
+
 
 def GetImageStatistics(image, x, y):
     imFrac=np.sum(image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
@@ -105,8 +107,11 @@ def SubtractBackground(image, ROI, dark_background):
         minX = ROI.x0 - ROI_db.x0
         maxX=(ROI.x0+ROI.xN-1)-ROI_db.x0
         minY=ROI.y0-ROI_db.y0
-        maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0    
-        image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
+        maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0
+        try:    
+            image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
+        except ValueError:
+            warnings.warn_explicit('Dark background ROI not large enough for image. Image will not be background subtracted',UserWarning,'XTCAV',0)
        
     return image
 
@@ -123,7 +128,7 @@ def DenoiseImage(image, snrfilter):
       contains_data: true if there is something in the image
     """
     #Applying the gaussian filter
-    filtered = cv2.GaussianBlur(image, (11, 11), 0)
+    filtered = cv2.GaussianBlur(image, (5, 5), 0)
 
     if np.sum(filtered) <= 0:
         warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
@@ -146,15 +151,19 @@ def DenoiseImage(image, snrfilter):
 
     return mask, mean
 
-def CropImage(img, mask, roi):
+def MaskImage(img, mean, masks, roi):
     #crop to roi, zero out noise and negative values, normalize image
     croppedimg = img[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
-    croppedimg[np.logical_or(mask == 0, croppedimg < 0)] = 0
-    croppedimg = croppedimg/np.sum(croppedimg)
-    return croppedimg
+    croppedimg -= mean
+    for i in range(masks.shape[0]):
+        copy = croppedimg
+        copy[np.logical_or(masks[i] == 0, croppedimg < 0)] = 0
+        masks[i] = copy
+    masks = masks/np.sum(masks)
+    return masks
 
 
-def FindROI(image,ROI,threshold,expandfactor):
+def FindROI(masks, ROI, threshold, expandfactor=1.5):
     """
     Find the subroi of the image
     Arguments:
@@ -168,32 +177,21 @@ def FindROI(image,ROI,threshold,expandfactor):
     """
 
     #For the cropping on each direction we use the profile on each direction
-    profileX=image.sum(0)
-    profileY=image.sum(1)
-    
-    maxpos=np.argmax(profileX)                             #Position of the maximum
-    thres=profileX[maxpos]*threshold                       #Threshold value
-    overthreshold=np.nonzero(profileX>=thres)[0]           #Indices that correspond to values higher than the threshold
-    center=(overthreshold[0]+overthreshold[-1])/2          #Middle position between the first value and the last value higher than th threshold
-    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor  #Total width after applying the expand factor
-    ind1X=np.round(center-width/2).astype(np.int)                         #Index on the left side form the center
-    ind2X=np.round(center+width/2).astype(np.int)                         #Index on the right side form the center
-    ind1X=max(0,ind1X)                                #Check that the index is not too negative
-    ind2X=min(profileX.size,ind2X)                    #Check that the index is not too high
-    
-    #Same for y
-    maxpos=np.argmax(profileY);
-    thres=profileY[maxpos]*threshold;
-    overthreshold=np.nonzero(profileY>=thres)[0]
-    center=(overthreshold[0]+overthreshold[-1])/2
-    width=(overthreshold[-1]-overthreshold[0]+1)*expandfactor
-    ind1Y = np.round(center-width/2).astype(np.int)
-    ind2Y = np.round(center+width/2).astype(np.int)
-    ind1Y = max(0, ind1Y)
-    ind2Y = min(profileY.size, ind2Y)
-   
-    #Cropping the image using the calculated indices
-    cropped = image[ind1Y:ind2Y,ind1X:ind2X]
+    total = masks.sum(axis=0)
+    rows = np.any(total, axis=1)
+    cols = np.any(total, axis=0)
+    ymin, ymax = np.where(rows)[0][[0, -1]]
+    xmin, xmax = np.where(cols)[0][[0, -1]]
+
+    widthy = (ymax - ymin +1)*expandfactor
+    centery = (ymax + ymin +1)/2
+    widthx = (xmax - xmin +1)*expandfactor
+    centerx = (xmax + xmin +1)/2
+
+    ind1Y = max(0, np.round(centery - widthy/2).astype(np.int))
+    ind2Y = min(np.round(centery + widthy/2).astype(np.int), rows.size)
+    ind1X = max(0, np.round(centerx - widthx/2).astype(np.int))
+    ind2X = min(np.round(centerx + widthx/2).astype(np.int), cols.size)
                 
     #Output ROI in terms of the input ROI            
     outROI = ROIMetrics(ind2X-ind1X+1, 
@@ -203,7 +201,7 @@ def FindROI(image,ROI,threshold,expandfactor):
         x=ROI.x0+np.arange(ind1X, ind2X), 
         y=ROI.y0+np.arange(ind1Y, ind2Y))
     
-    return cropped,outROI
+    return masks[:,ind1Y:ind2Y,ind1X:ind2X], outROI
 
 
 def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
@@ -247,27 +245,29 @@ def processImage(img, parameters, dark_background, global_calibration,
             return None, None
 
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img_db = SubtractBackground(img, roi, dark_background)  
+        img_db = SubtractBackground(img, roi, dark_background) 
+        croppedimg =  img_db[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
 
-        mask, mean = DenoiseImage(img_db, parameters.snrfilter)                    #Remove noise from the image and normalize it
+        mask, mean = DenoiseImage(croppedimg, parameters.snrfilter)                    #Remove noise from the image and normalize it
         if mask is None:                                        #If there is nothing in the image we skip the event  
             return None, None
 
-        mask, roi = FindROI(mask, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        if roi.xN < 3 or roi.yN < 3:
-            print 'ROI too small', roi.xN, roi.yN
-            return None, None
-
-        final_img = CropImage(img_db, mask, roi)
-
-        processed_image = su.SplitImage(final_img, parameters.num_bunches, parameters.islandsplitmethod, 
+        masks = su.SplitImage(mask, parameters.num_bunches, parameters.islandsplitmethod, 
             parameters.islandsplitpar1, parameters.islandsplitpar2)#new
-
-        num_bunches_found = processed_image.shape[0]
-        if parameters.num_bunches != num_bunches_found:
+        
+        if masks is None:                                        #If there is nothing in the image we skip the event  
             return None, None
 
-        image_stats = ProcessXTCAVImage(processed_image,roi)          #Obtain the different properties and profiles from the trace               
+        num_bunches_found = masks.shape[0]
+        if parameters.num_bunches != num_bunches_found:
+            warnings.warn_explicit('Incorrect number of bunches detected in image.',UserWarning,'XTCAV',0)
+            return None, None
+
+        masks, roi = FindROI(masks, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+
+        processed_image = MaskImage(img_db, mean, masks, roi)
+
+        image_stats = ProcessXTCAVImage(processed_image, roi)          #Obtain the different properties and profiles from the trace               
 
         physical_units = CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
         if not physical_units.valid:
@@ -347,32 +347,28 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         eRMSslice=image_stats[j].yRMSslice*physical_units.yMeVPerPix                               #Energy dispersion for each t converted to the right units
 
         interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
-        eCurrent=interp(t);    
+        eCurrent=interp(t)    
                                                    
         interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
-        eCOMslice=interp(t);
+        eCOMslice=interp(t)
             
         interp=scipy.interpolate.interp1d(physical_units.xfs-distT,eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time
         eRMSslice=interp(t)        
         
         #Find best no lasing match
-        NG=nolasing_averaged_profiles.eCurrent.shape[1];
-        err= np.zeros(NG, dtype=np.float64);
-        for g in range(NG):
-            err[g] = np.corrcoef(eCurrent,nolasing_averaged_profiles.eCurrent[j,g,:])[0,1]**2;
+        num_groups=nolasing_averaged_profiles.eCurrent[j].shape[0]
+        err = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1]**2, 1, nolasing_averaged_profiles.eCurrent[j])
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
-        order=np.argsort(err)
-        refInd=order[-1];
-        groupnum[j]=refInd
+        groupnum[j]=np.argmax(err)
         
         #The change in the delay and in energy with respect to the same bunch for the no lasing reference
-        bunchdelaychange[j]=distT-nolasing_averaged_profiles.distT[j,refInd]
-        bunchenergydiffchange[j]=distE-nolasing_averaged_profiles.distE[j,refInd]
+        bunchdelaychange[j]=distT-nolasing_averaged_profiles.distT[j][groupnum[j]]
+        bunchenergydiffchange[j]=distE-nolasing_averaged_profiles.distE[j][groupnum[j]]
                                        
         #We do proper assignations
         lasingECurrent[j,:]=eCurrent
-        nolasingECurrent[j,:]=nolasing_averaged_profiles.eCurrent[j,refInd,:]
+        nolasingECurrent[j,:]=nolasing_averaged_profiles.eCurrent[j][groupnum[j],:]
 
         #We threshold the ECOM and ERMS based on electron current
         threslevel=0.1;
@@ -387,13 +383,13 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         #And do the rest of the assignations taking into account the thresholding
         lasingECOM[j,ind1:ind2]=eCOMslice[ind1:ind2]
-        nolasingECOM[j,ind1:ind2]=nolasing_averaged_profiles.eCOMslice[j,refInd,ind1:ind2]
+        nolasingECOM[j,ind1:ind2]=nolasing_averaged_profiles.eCOMslice[j][groupnum[j],ind1:ind2]
         lasingERMS[j,ind1:ind2]=eRMSslice[ind1:ind2]
-        nolasingERMS[j,ind1:ind2]=nolasing_averaged_profiles.eRMSslice[j,refInd,ind1:ind2]
+        nolasingERMS[j,ind1:ind2]=nolasing_averaged_profiles.eRMSslice[j][groupnum[j],ind1:ind2]
         
         #First calculation of the power based on center of masses and dispersion for each bunch
-        powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6)*eCurrent    #In J/s
-        powerERMS[j,:]=(lasingERMS[j,:]**2-nolasingERMS[j,:]**2)*(eCurrent**(2.0/3.0)) #
+        powerECOM[j,:]=((nolasingECOM[j]-lasingECOM[j])*Constants.E_CHARGE*1e6)*eCurrent    #In J/s
+        powerERMS[j,:]=(lasingERMS[j]**2-nolasingERMS[j]**2)*(eCurrent**(2.0/3.0)) #
         
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
@@ -468,7 +464,9 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
             distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
             profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
         
-        num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups        
+        num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups  
+
+        print "Averaging lasing off profiles into ", num_clusters, " groups."      
             
         model = AgglomerativeClustering(n_clusters=num_clusters, linkage="ward", affinity="euclidean")
         model.fit(profilesT)
@@ -532,22 +530,21 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
         averageERMS, num_bunches, eventTime, eventFid)
 
 
-def findOptGroups(profilesT, B, max_num):
-    num_profiles, t = profilesT.shape
-    rand_sample = np.zeros((num_profiles,t), dtype=np.float64)
+def findOptGroups(X, B, max_num):
+    num_profiles, t = X.shape
     rand_cluster_variance = {}
     true_cluster_variance = {}
     sd = {}
     #svd of profiles matrix
-    column_mean = np.mean(profilesT, axis=0)
-    centered = profilesT - column_mean
+    column_mean = np.mean(X, axis=0)
+    centered = X - column_mean
     u,d,vt = np.linalg.svd(centered)
     x_ = np.matmul(centered, vt.T)
     bounding_box = getBoundingBox(x_)
     for i in range(2, max_num+1):
-        model = AgglomerativeClustering(n_clusters=i, linkage="average", affinity="euclidean")
-        model.fit(profilesT)
-        true_cluster_variance[i] = np.log(calcClusterVariance(model.labels_, profilesT, i))
+        model = AgglomerativeClustering(n_clusters=i, linkage="ward", affinity="euclidean")
+        model.fit(X)
+        true_cluster_variance[i] = np.log(calcClusterVariance(model.labels_, X, i))
         rand_variance = []
         #generate B random reference datasets
         for k in range(B):

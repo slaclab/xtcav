@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from psana import *
+from xtcav import Constants
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -7,8 +8,8 @@ parser.add_argument("exprun", help="psana experiment/run string (e.g. exp=xppd71
 args = parser.parse_args()
 
 ds = DataSource(args.exprun)
-xtcav = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds.env())
-gdet = Detector('FEEGasDetEnergy')
+xtcav = Detector(Constants.SRC,ds.env())
+gdet = Detector(Constants.GAS_DETECTOR)
 
 def getLasingOffShot(XTCAVRetrieval,expt):
     results=XTCAVRetrieval._pulse_characterization
@@ -18,29 +19,31 @@ def getLasingOffShot(XTCAVRetrieval,expt):
     group = results.groupnum[ibunch]
     profs = lor.averaged_profiles
 
-    ds_lasingoff = DataSource('exp=%s:run=%d:idx'%(expt,lor.run))
+    ds_lasingoff = DataSource('exp=%s:run=%s:idx'%(expt,lor.parameters.run))
     run = ds_lasingoff.runs().next()
     times = run.times()
     time = profs.eventTime[ibunch][group]
     fid = profs.eventFid[ibunch][group]
     et = EventTime(int(time),int(fid))
     evt_lasingoff = run.event(et)
-    xtcav_lasingoff = Detector('XrayTransportDiagnostic.0:Opal1000.0',ds_lasingoff.env())
+    xtcav_lasingoff = Detector(Constants.SRC,ds_lasingoff.env())
     if xtcav_lasingoff is None:
         print 'No lasing off image found for unixtime',time,'and fiducials',fid
-    print 'Found lasing off shot in run',lor.runs[0]
+    print 'Found lasing off shot in run',lor.parameters.run
     return xtcav_lasingoff.raw(evt_lasingoff)
 
 import matplotlib.pyplot as plt
+#plt.switch_backend('agg')
 from xtcav.LasingOnCharacterization import *
-XTCAVRetrieval=LasingOnCharacterization()
+XTCAVRetrieval=LasingOnCharacterization(lasingoffreferencepath="/reg/d/psdm/AMO/amox23616/calib/Xtcav::CalibV1/XrayTransportDiagnostic.0:Opal1000.0/lasingoffreference/131-end.data")
 for evt in ds.events():
     if not XTCAVRetrieval.processEvent(evt):
         continue
+    gd = gdet.get(evt)
     
     time, power = XTCAVRetrieval.xRayPower() 
     agreement = XTCAVRetrieval.reconstructionAgreement()
-    print 'Agreement:',agreement,'OK:',ok,'Gasdet:',gd.f_11_ENRC()
+    print 'Agreement:',agreement,'Gasdet:',gd.f_11_ENRC()
     
     if agreement<0.5: 
         continue
@@ -82,6 +85,8 @@ for evt in ds.events():
     plt.plot(time[0],power[0])
 
     plt.show()
+
+    break
 
 # available quantities from step3, from xtcav/src/Utils.py:ProcessLasingSingleShot
 
