@@ -113,7 +113,6 @@ class LasingOffReference(object):
         image_numbers = xtup.DivideImageTasks(first_event, len(times), rank, size)
 
         num_processed = 0 #Counter for the total number of xtcav images processed within the run  
-        arr = []
         for t in image_numbers: 
             evt = run.event(times[t])
             ebeam = ebeam_data.get(evt)
@@ -130,7 +129,6 @@ class LasingOffReference(object):
 
             if not image_profile:
                 continue
-            arr.append(processed_img[0])
             
             #Append only image profile, omit processed image                                                                                                                                                              
             list_image_profiles.append(image_profile)     
@@ -158,7 +156,6 @@ class LasingOffReference(object):
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
         averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
 
-        np.save("test_profiles", arr)
         self.averaged_profiles=averaged_profiles
         self.n=num_processed    
         
@@ -244,10 +241,10 @@ class LasingOffReference(object):
         try:
             lor.parameters = LasingOffParameters(**lor.parameters)
             lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
-        except TypeError:
+        except AttributeError:
             print "Could not load Lasing Off Reference with path "+ path+". Try recreating lasing off " +\
             "reference to ensure compatability between versions"
-            sys.exit(1)
+            return None
         return lor
 
 

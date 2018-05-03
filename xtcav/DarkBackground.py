@@ -146,10 +146,10 @@ class DarkBackground(object):
         try:
             obj.ROI = ROIMetrics(**obj.ROI)
             obj.parameters = DarkBackgroundParameters(**obj.parameters)
-        except TypeError:
+        except AttributeError:
             print "Could not load Dark Reference with path "+ path+". Try recreating dark reference " +\
             "to ensure compatability between versions"
-            sys.exit(1)
+            return None
         return obj
 
 DarkBackgroundParameters = namedtuple('DarkBackgroundParameters', 

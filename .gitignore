@@ -7,3 +7,4 @@ xtcav.egg-info
 *.pyc
 build/
 dist/
+*.mat

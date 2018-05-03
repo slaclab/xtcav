@@ -1,7 +1,7 @@
 import numpy as np
 from Utils import *
 
-def SplitImage(image, n, islandsplitmethod,par1,par2):
+def SplitImage(image, n, islandsplitmethod, par1, par2):
     """
     Split an XTCAV image depending of different bunches. This function needs to be expanded
     Arguments:
@@ -13,8 +13,8 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
 
     if islandsplitmethod == 'contourLabel' or islandsplitmethod == 'autothreshold':    #For one bunch, just the same image
         warnings.warn_explicit('Method ' + islandsplitmethod + ' not currently implemented in this version of xtcav', UserWarning,'XTCAV',0)
-        outimage=np.zeros((n,image.shape[0],image.shape[1]))
-        outimage[0,:,:]=image    
+        outimages=np.zeros((n,image.shape[0],image.shape[1]))
+        outimages[0,:,:]=image    
     
     else:       #In any other case just copies of the image, for debugging purposes
         Nx = image.shape[1]
@@ -38,7 +38,7 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
         biggestarea = areas[orderareaind[0]]
 
         n_area_valid = 1
-        for i in range(1,n_groups): 
+        for i in range(1, n_groups-1): 
             if areas[orderareaind[i]] < 1.0/20*biggestarea:
                 break
             n_area_valid+=1
@@ -50,4 +50,4 @@ def SplitImage(image, n, islandsplitmethod,par1,par2):
         for i in range(n_valid):
             outimages[i,:,:] = groups==(orderareaind[i]+1)
             
-    return outimage
+    return outimages

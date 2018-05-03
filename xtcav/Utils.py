@@ -361,6 +361,7 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
         groupnum[j]=np.argmax(err)
+        print "Using ", groupnum[j]
         
         #The change in the delay and in energy with respect to the same bunch for the no lasing reference
         bunchdelaychange[j]=distT-nolasing_averaged_profiles.distT[j][groupnum[j]]

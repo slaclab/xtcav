@@ -41,7 +41,7 @@ for evt in ds.events():
         continue
     gd = gdet.get(evt)
     
-    time, power = XTCAVRetrieval.xRayPower() 
+    time, power = XTCAVRetrieval.xRayPower(method="COM") 
     agreement = XTCAVRetrieval.reconstructionAgreement()
     print 'Agreement:',agreement,'Gasdet:',gd.f_11_ENRC()
     
@@ -66,19 +66,19 @@ for evt in ds.events():
     plt.title('Current')
     plt.plot(time[0],results.lasingECurrent[0],label='lasing')
     plt.plot(time[0],results.nolasingECurrent[0],label='nolasing')
-    plt.legend()
+    #plt.legend()
 
     plt.subplot(3,2,4)
     plt.title('E (Delta)')
     plt.plot(time[0],results.lasingECOM[0],label='lasing')
     plt.plot(time[0],results.nolasingECOM[0],label='nolasing')
-    plt.legend()
+    #plt.legend()
 
     plt.subplot(3,2,5)
     plt.title('E (Sigma)')
     plt.plot(time[0],results.lasingERMS[0],label='lasing')
     plt.plot(time[0],results.nolasingERMS[0],label='nolasing')
-    plt.legend()
+    #plt.legend()
 
     plt.subplot(3,2,6)
     plt.title('Power')
@@ -86,7 +86,6 @@ for evt in ds.events():
 
     plt.show()
 
-    break
 
 # available quantities from step3, from xtcav/src/Utils.py:ProcessLasingSingleShot
 
