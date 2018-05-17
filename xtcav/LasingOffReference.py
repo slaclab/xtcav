@@ -124,7 +124,7 @@ class LasingOffReference(object):
                 continue 
 
             img = xtcav_camera.image(evt)
-            image_profile, processed_img = xtu.processImage(img, self.parameters, dark_background, global_calibration, 
+            image_profile, _ = xtu.processImage(img, self.parameters, dark_background, global_calibration, 
                                                     saturation_value, roi_xtcav, shot_to_shot)
 
             if not image_profile:

@@ -35,7 +35,7 @@ def getLasingOffShot(XTCAVRetrieval,expt):
 import matplotlib.pyplot as plt
 #plt.switch_backend('agg')
 from xtcav.LasingOnCharacterization import *
-XTCAVRetrieval=LasingOnCharacterization(lasingoffreferencepath="/reg/d/psdm/AMO/amox23616/calib/Xtcav::CalibV1/XrayTransportDiagnostic.0:Opal1000.0/lasingoffreference/131-end.data")
+XTCAVRetrieval=LasingOnCharacterization(lasingoffreferencepath="/reg/d/psdm/AMO/amox23616/calib/Xtcav::CalibV1/XrayTransportDiagnostic.0:Opal1000.0/lasingoffreference/60-78.data")
 for evt in ds.events():
     if not XTCAVRetrieval.processEvent(evt):
         continue

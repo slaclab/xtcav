@@ -3,7 +3,6 @@
 import numpy as np
 #
 import scipy.interpolate
-#import scipy.stats.mstats 
 import time
 import warnings
 import cv2
@@ -132,7 +131,6 @@ def DenoiseImage(image, snrfilter):
 
     if np.sum(filtered) <= 0:
         warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
-        np.save("blank_img", image)
         return None, None
     
     #Obtaining the mean and the standard deviation of the noise by using pixels only on the border
@@ -163,7 +161,7 @@ def MaskImage(img, mean, masks, roi):
     return masks
 
 
-def FindROI(masks, ROI, threshold, expandfactor=1.5):
+def FindROI(masks, ROI, threshold, expandfactor=1):
     """
     Find the subroi of the image
     Arguments:
@@ -264,12 +262,12 @@ def processImage(img, parameters, dark_background, global_calibration,
             return None, None
 
         masks, roi = FindROI(masks, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-
+        
         processed_image = MaskImage(img_db, mean, masks, roi)
 
         image_stats = ProcessXTCAVImage(processed_image, roi)          #Obtain the different properties and profiles from the trace               
-
-        physical_units = CalculatePhyscialUnits(roi,[image_stats[0].xCOM,image_stats[0].yCOM], shot_to_shot, global_calibration)   
+        
+        physical_units = CalculatePhyscialUnits(roi,(image_stats[0].xCOM,image_stats[0].yCOM), shot_to_shot, global_calibration)   
         if not physical_units.valid:
             return None, None
 
@@ -357,11 +355,11 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         #Find best no lasing match
         num_groups=nolasing_averaged_profiles.eCurrent[j].shape[0]
-        err = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1]**2, 1, nolasing_averaged_profiles.eCurrent[j])
+        corr = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1]**2, 1, nolasing_averaged_profiles.eCurrent[j])
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
-        groupnum[j]=np.argmax(err)
-        print "Using ", groupnum[j]
+        groupnum[j]=np.argmax(corr)
+        #groupnum[j] = np.random.randint(0, num_groups-1) if num_groups > 1 else 0
         
         #The change in the delay and in energy with respect to the same bunch for the no lasing reference
         bunchdelaychange[j]=distT-nolasing_averaged_profiles.distT[j][groupnum[j]]
@@ -372,9 +370,9 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent[j,:]=nolasing_averaged_profiles.eCurrent[j][groupnum[j],:]
 
         #We threshold the ECOM and ERMS based on electron current
-        threslevel=0.1;
-        threslasing=np.amax(lasingECurrent[j,:])*threslevel;
-        thresnolasing=np.amax(nolasingECurrent[j,:])*threslevel;       
+        threslevel=0.1
+        threslasing=np.amax(lasingECurrent[j,:])*threslevel
+        thresnolasing=np.amax(nolasingECurrent[j,:])*threslevel      
         indiceslasing=np.where(lasingECurrent[j,:]>threslasing)
         indicesnolasing=np.where(nolasingECurrent[j,:]>thresnolasing)      
         ind1=np.amax([indiceslasing[0][0],indicesnolasing[0][0]])
@@ -467,11 +465,18 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
         
         num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups  
 
-        print "Averaging lasing off profiles into ", num_clusters, " groups."      
-            
-        model = AgglomerativeClustering(n_clusters=num_clusters, linkage="ward", affinity="euclidean")
-        model.fit(profilesT)
-        groups = model.labels_
+        print "Averaging lasing off profiles into ", num_clusters, " groups."   
+
+        if num_profiles == 1:
+            groups = np.array([0]) 
+        #for debugging. can remove
+        elif num_clusters == num_profiles:
+            groups = np.array(list(range(num_profiles)))
+        else:     
+            model = AgglomerativeClustering(n_clusters=num_clusters, linkage="ward", affinity="euclidean")
+            model.fit(profilesT)
+            groups = model.labels_
+
     #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
 
         averageECurrent.append(np.zeros((num_clusters, len(t)), dtype=np.float64))
@@ -485,12 +490,11 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
         eventFid.append(np.zeros(num_clusters, dtype=np.uint32))
         
         for g in range(num_clusters):#For each group
-            indices = np.where(model.labels_ == g)[0]
+            indices = np.where(groups == g)[0]
             num_in_cluster = len(indices)
             sublist_shot_to_shot =  [list_shot_to_shot[i] for i in indices]
             sublist_image_stats = [list_image_stats[i] for i in indices]
             sublist_physical_units = [list_physical_units[i] for i in indices]
-            
             
             eventTime[j][g] = sublist_shot_to_shot[-1].unixtime
             eventFid[j][g] = sublist_shot_to_shot[-1].fiducial
@@ -533,6 +537,8 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
 
 def findOptGroups(X, B, max_num):
     num_profiles, t = X.shape
+    if num_profiles == 1:
+        return 1
     rand_cluster_variance = {}
     true_cluster_variance = {}
     sd = {}
