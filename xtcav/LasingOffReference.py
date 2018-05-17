@@ -154,7 +154,7 @@ class LasingOffReference(object):
             image_profiles = image_profiles[0:self.parameters.maxshots]
         
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
-        averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
+        averaged_profiles = xtu.StandardizeXTCAVProfiles(image_profiles)     
 
         self.averaged_profiles=averaged_profiles
         self.n=num_processed    

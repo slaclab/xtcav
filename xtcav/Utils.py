@@ -411,7 +411,8 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
+    
+def StandardizeXTCAVProfiles(list_image_profiles):
     """
     Cluster together profiles of xtcav images
     Arguments:
@@ -428,7 +429,6 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
     num_profiles = len(list_image_profiles)           #Total number of profiles
     num_bunches = len(list_image_stats[0])       #Number of bunches
 
-    B = 20
     # Obtain physical units and calculate time vector   
     #We find adequate values for the master time
     maxt = np.amax([np.amax(l.xfs) for l in list_physical_units])
@@ -443,17 +443,17 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
 
     #And create the master time vector in fs
     t=np.arange(mint,maxt+dt,dt)
-
-    averageECurrent = []      #Electron current in (#electrons/s)
-    averageECOMslice = []   #Energy center of masses for each time in MeV
-    averageERMSslice = []      #Energy dispersion for each time in MeV
-    averageDistT = []                #Distance in time of the center of masses with respect to the center of the first bunch in fs
-    averageDistE = []                #Distance in energy of the center of masses with respect to the center of the first bunch in MeV
-    averageTRMS = []                  #Total dispersion in time in fs
-    averageERMS = []                 #Total dispersion in energy in MeV
-    eventTime = []
-    eventFid = []
-
+    
+    averageECurrent = np.zeros((num_bunches, num_profiles, len(t)), dtype=np.float64)
+    averageECOMslice = np.zeros((num_bunches,num_profiles, len(t)), dtype=np.float64)      #Energy center of masses for each time in MeV
+    averageERMSslice = np.zeros((num_bunches,num_profiles, len(t)), dtype=np.float64)      #Energy dispersion for each time in MeV
+    averageDistT = np.zeros((num_bunches,num_profiles), dtype=np.float64)                 #Distance in time of the center of masses with respect to the center of the first bunch in fs
+    averageDistE = np.zeros((num_bunches,num_profiles), dtype=np.float64)                 #Distance in energy of the center of masses with respect to the center of the first bunch in MeV
+    averageTRMS = np.zeros((num_bunches,num_profiles), dtype=np.float64)                  #Total dispersion in time in fs
+    averageERMS = np.zeros((num_bunches,num_profiles), dtype=np.float64)                 #Total dispersion in energy in MeV
+    eventTime = np.zeros((num_bunches,num_profiles), dtype=np.uint64)
+    eventFid = np.zeros((num_bunches,num_profiles), dtype=np.uint32)
+    
     #We treat each bunch separately, even group them separately
     for j in range(num_bunches):
         #Decide which profiles are going to be in which groups and average them together
@@ -463,72 +463,33 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
             distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
             profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
         
-        num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups  
+         #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
 
-        print "Averaging lasing off profiles into ", num_clusters, " groups."   
-
-        if num_profiles == 1:
-            groups = np.array([0]) 
-        #for debugging. can remove
-        elif num_clusters == num_profiles:
-            groups = np.array(list(range(num_profiles)))
-        else:     
-            model = AgglomerativeClustering(n_clusters=num_clusters, linkage="ward", affinity="euclidean")
-            model.fit(profilesT)
-            groups = model.labels_
-
-    #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
-
-        averageECurrent.append(np.zeros((num_clusters, len(t)), dtype=np.float64))
-        averageECOMslice.append(np.zeros((num_clusters, len(t)), dtype=np.float64))      #Energy center of masses for each time in MeV
-        averageERMSslice.append(np.zeros((num_clusters, len(t)), dtype=np.float64))      #Energy dispersion for each time in MeV
-        averageDistT.append(np.zeros(num_clusters, dtype=np.float64))                 #Distance in time of the center of masses with respect to the center of the first bunch in fs
-        averageDistE.append(np.zeros(num_clusters, dtype=np.float64))                 #Distance in energy of the center of masses with respect to the center of the first bunch in MeV
-        averageTRMS.append(np.zeros(num_clusters, dtype=np.float64))                  #Total dispersion in time in fs
-        averageERMS.append(np.zeros(num_clusters, dtype=np.float64))                 #Total dispersion in energy in MeV
-        eventTime.append(np.zeros(num_clusters, dtype=np.uint64))
-        eventFid.append(np.zeros(num_clusters, dtype=np.uint32))
-        
-        for g in range(num_clusters):#For each group
-            indices = np.where(groups == g)[0]
-            num_in_cluster = len(indices)
-            sublist_shot_to_shot =  [list_shot_to_shot[i] for i in indices]
-            sublist_image_stats = [list_image_stats[i] for i in indices]
-            sublist_physical_units = [list_physical_units[i] for i in indices]
+        for g in range(num_profiles):#For each group
             
-            eventTime[j][g] = sublist_shot_to_shot[-1].unixtime
-            eventFid[j][g] = sublist_shot_to_shot[-1].fiducial
-            distT=[(sublist_image_stats[i][j].xCOM-sublist_image_stats[i][0].xCOM) \
-                   *sublist_physical_units[i].xfsPerPix for i in range(num_in_cluster)]
-            distE=[(sublist_image_stats[i][j].yCOM-sublist_image_stats[i][0].yCOM) \
-                   *sublist_physical_units[i].yMeVPerPix for i in range(num_in_cluster)]
-            averageDistT[j][g] = np.mean(distT)
-            averageDistE[j][g] = np.mean(distE)
+            eventTime[j,g] = list_shot_to_shot[g].unixtime
+            eventFid[j,g] = list_shot_to_shot[g].fiducial
             
-            tRMS = [sublist_image_stats[i][j].xRMS*sublist_physical_units[i].xfsPerPix for i in range(num_in_cluster)]  #Conversion to fs and accumulate it in the right group
-            eRMS = [sublist_image_stats[i][j].yRMS*sublist_physical_units[i].yMeVPerPix for i in range(num_in_cluster)]
-            averageTRMS[j][g] = np.mean(tRMS)
-            averageTRMS[j][g] = np.mean(eRMS)
+            averageDistT[j,g] = (list_image_stats[g][j].xCOM-list_image_stats[g][0].xCOM)*list_physical_units[g].xfsPerPix
+            averageDistE[j,g] = (list_image_stats[g][j].yCOM-list_image_stats[g][0].yCOM)*list_physical_units[g].yMeVPerPix 
             
-            for i in range(num_in_cluster):
-                dt_old=sublist_physical_units[i].xfs[1]-sublist_physical_units[i].xfs[0] # dt before interpolation   
-                eCurrent=sublist_image_stats[i][j].xProfile/(dt_old*1e-15)*num_electrons[i]                              #Electron current in electrons/s   
+            averageTRMS[j][g] = list_image_stats[g][j].xRMS*list_physical_units[g].xfsPerPix   #Conversion to fs and accumulate it in the right group
+            averageTRMS[j][g] = list_image_stats[g][j].yRMS*list_physical_units[g].yMeVPerPix 
+            
+            dt_old=list_physical_units[g].xfs[1]-list_physical_units[g].xfs[0] # dt before interpolation   
+            eCurrent=list_image_stats[g][j].xProfile/(dt_old*1e-15)*num_electrons[g]                              #Electron current in electrons/s   
 
-                eCOMslice=(sublist_image_stats[i][j].yCOMslice-sublist_image_stats[i][j].yCOM)*sublist_physical_units[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
-                eRMSslice=sublist_image_stats[i][j].yRMSslice*sublist_physical_units[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
+            eCOMslice=(list_image_stats[g][j].yCOMslice-list_image_stats[g][j].yCOM)*list_physical_units[g].yMeVPerPix #Center of mass in energy for each t converted to the right units
+            eRMSslice=list_image_stats[g][j].yRMSslice*list_physical_units[g].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
 
-                interp=scipy.interpolate.interp1d(sublist_physical_units[i].xfs-distT[i],eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
-                averageECurrent[j][g,:]=averageECurrent[j][g,:]+interp(t)  #Accumulate it in the right group                    
+            interp=scipy.interpolate.interp1d(list_physical_units[g].xfs-averageDistT[j,g],eCurrent,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)  #Interpolation to master time                    
+            averageECurrent[j][g,:]=averageECurrent[j][g,:]+interp(t)  #Accumulate it in the right group                    
 
-                interp=scipy.interpolate.interp1d(sublist_physical_units[i].xfs-distT[i],eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
-                averageECOMslice[j][g,:]=averageECOMslice[j][g,:]+interp(t)          #Accumulate it in the right group
+            interp=scipy.interpolate.interp1d(list_physical_units[g].xfs-averageDistT[j,g],eCOMslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+            averageECOMslice[j][g,:]=averageECOMslice[j][g,:]+interp(t)          #Accumulate it in the right group
 
-                interp=scipy.interpolate.interp1d(sublist_physical_units[i].xfs-distT[i],eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
-                averageERMSslice[j][g,:]=averageERMSslice[j][g,:]+interp(t)
-
-            averageECurrent[j][g,:] = averageECurrent[j][g,:]/num_in_cluster
-            averageECOMslice[j][g,:] = averageECOMslice[j][g,:]/num_in_cluster
-            averageERMSslice[j][g,:] = averageERMSslice[j][g,:]/num_in_cluster
+            interp=scipy.interpolate.interp1d(list_physical_units[g].xfs-averageDistT[j,g],eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
+            averageERMSslice[j][g,:]=interp(t)
 
     return AveragedProfiles(t, averageECurrent, averageECOMslice, 
         averageERMSslice, averageDistT, averageDistE, averageTRMS, 
