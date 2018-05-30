@@ -27,26 +27,26 @@ class LasingOnCharacterization(object):
     Class that can be used to reconstruct the full X-Ray power time profile for single or multiple bunches, relying on the presence of a dark background reference, and a lasing off reference. (See GenerateDarkBackground and Generate LasingOffReference for more information)
     Attributes:
         calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
-        snrfilter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
-        roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
-        roiexpand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
-        islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
+        snr_filter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
+        roi_waist_thres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace (If not set, the value that was used for the lasing off reference will be used).
+        roi_expand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
+        island_split_method (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
     """
 
     def __init__(self, 
         experiment='',
-        runs='',
+        run_numbers='',
         num_bunches = None,
         start_image = 0,
-        snrfilter = None,
-        roiwaistthres = None,
-        roiexpand = None,
-        islandsplitmethod=None,
-        islandsplitpar1=None,
-        islandsplitpar2=None,
-        darkreferencepath=None,
-        lasingoffreferencepath=None,
-        calpath=''
+        snr_filter = None,
+        roi_waist_thres = None,
+        roi_expand = None,
+        island_split_method=None,
+        island_split_par1=None,
+        island_split_par2=None,
+        dark_reference_path=None,
+        lasingoff_reference_path=None,
+        calibration_path=''
         ):
             
         #Handle warnings
@@ -54,23 +54,23 @@ class LasingOnCharacterization(object):
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
         
         self.experiment = experiment                #Experiment label
-        self.runs = runs                            #Run numbers
+        self.run_numbers = run_numbers                            #Run numbers
         self.num_bunches = num_bunches              #Number of bunches
         self.start_image = start_image
-        self.snrfilter = snrfilter                  #Number of sigmas for the noise threshold
-        self.roiwaistthres = roiwaistthres          #Parameter for the roi location
-        self.roiexpand = roiexpand                  #Parameter for the roi location
-        self.islandsplitmethod = islandsplitmethod  #Method for island splitting
-        self.islandsplitpar1 = islandsplitpar1
-        self.islandsplitpar2 = islandsplitpar2
+        self.snr_filter = snr_filter                  #Number of sigmas for the noise threshold
+        self.roi_waist_thres = roi_waist_thres          #Parameter for the roi location
+        self.roi_expand = roi_expand                  #Parameter for the roi location
+        self.island_split_method = island_split_method  #Method for island splitting
+        self.island_split_par1 = island_split_par1
+        self.island_split_par2 = island_split_par2
         
-        self.darkreferencepath = darkreferencepath  #Dark reference file path
-        self.lasingoffreferencepath = lasingoffreferencepath        #Lasing off reference file path 
-        self.calpath = calpath
+        self.dark_reference_path = dark_reference_path  #Dark reference file path
+        self.lasingoff_reference_path = lasingoff_reference_path        #Lasing off reference file path 
+        self.calibration_path = calibration_path
         
         self._envset = False
         self._calibrationsset = False
-        if experiment and runs:
+        if experiment and run_numbers:
             self._setDataSource()
 
         self._loadDarkReference()
@@ -78,7 +78,9 @@ class LasingOnCharacterization(object):
 
             
     def _setDataSource(self):
-
+        """
+        Method that uses detector interface to gather data source info. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.    
+        """
         self._env = psana.det_interface._getEnv()
         self._xtcav_camera = psana.Detector(Constants.SRC)
         self._ebeam_data = psana.Detector(Constants.EBEAM)
@@ -90,20 +92,23 @@ class LasingOnCharacterization(object):
 
 
     def _setCalibrations(self, evt):
+        """
+        Method that sets the xtcav calibration values for a given run. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.    
+        """
         self._currentrun = evt.run()
         if not self._darkreference:
             self._loadDarkReference()
         if not self._lasingoffreference:
             self._loadLasingOffReference()
 
-        self._roixtcav = xtup.GetXTCAVImageROI(evt)
-        self._global_calibration = xtup.GetGlobalXTCAVCalibration(evt)
-        self._saturation_value = xtup.GetCameraSaturationValue(evt)
+        self._roixtcav = xtup.getXTCAVImageROI(evt)
+        self._global_calibration = xtup.getGlobalXTCAVCalibration(evt)
+        self._saturation_value = xtup.getCameraSaturationValue(evt)
         if self._roixtcav and self._global_calibration and self._saturation_value:
             self._calibrationsset = True
 
-        self.parameters = LasingOnParameters(self.num_bunches, self.snrfilter, self.roiwaistthres, 
-            self.roiexpand, self.islandsplitmethod, self.islandsplitpar1, self.islandsplitpar2 )
+        self.parameters = LasingOnParameters(self.num_bunches, self.snr_filter, self.roi_waist_thres, 
+            self.roi_expand, self.island_split_method, self.island_split_par1, self.island_split_par2 )
 
 
     def _loadDarkReference(self):
@@ -112,19 +117,19 @@ class LasingOnCharacterization(object):
         """
         self._darkreference = None
 
-        if not self.darkreferencepath:
+        if not self.dark_reference_path:
             if not self._envset:
                 return 
 
-            cp=CalibrationPaths(self._env, self.calpath)       
-            self.darkreferencepath=cp.findCalFileName(Constants.DB_FILE_NAME, self._currentrun)
+            cp = CalibrationPaths(self._env, self.calibration_path)       
+            self.dark_reference_path = cp.findCalFileName(Constants.DB_FILE_NAME, self._currentrun)
             #If we could not find it, we just wont use it, and return False
-            if not self.darkreferencepath:
+            if not self.dark_reference_path:
                 warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
                 return    
-            print "Using file " + self.darkreferencepath.split("/")[-1] + " for dark reference"
+            print "Using file " + self.dark_reference_path.split("/")[-1] + " for dark reference"
         
-        self._darkreference = DarkBackground.load(self.darkreferencepath)
+        self._darkreference = DarkBackground.load(self.dark_reference_path)
 
                 
     def _loadLasingOffReference(self):
@@ -133,22 +138,22 @@ class LasingOnCharacterization(object):
         """
         self._lasingoffreference = None
 
-        if not self.lasingoffreferencepath:
+        if not self.lasingoff_reference_path:
             if not self._envset:
-                #warnings.warn_explicit('Lasing off reference not loaded. Must set datasource or supply lasingoffreferencepath',UserWarning, 'XTCAV',0)
                 return 
-            cp = CalibrationPaths(self._env, self.calpath)     
-            self.lasingoffreferencepath = cp.findCalFileName(Constants.LOR_FILE_NAME,  self._currentrun)
-            
-            #If we could not find it, we load default parameters, and return False
-            if not self.lasingoffreferencepath:
-                warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
-                self._loadDefaultProcessingParameters()            
-                return
-            print "Using file " + self.lasingoffreferencepath.split("/")[-1] + " for lasing off reference"
 
-        self._lasingoffreference = LasingOffReference.load(self.lasingoffreferencepath)
-        self._loadLasingOffReferenceParameters()
+            cp = CalibrationPaths(self._env, self.calibration_path)     
+            self.lasingoff_reference_path = cp.findCalFileName(Constants.LOR_FILE_NAME,  self._currentrun)
+            
+            if self.lasingoff_reference_path:
+                self._lasingoffreference = LasingOffReference.load(self.lasingoff_reference_path)
+
+        if not self._lasingoffreference:
+            warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
+            self._loadDefaultProcessingParameters()
+        else:
+            print "Using file " + self.lasingoff_reference_path.split("/")[-1] + " for lasing off reference"
+            self._loadLasingOffReferenceParameters()
 
             
     def _loadDefaultProcessingParameters(self):
@@ -157,18 +162,18 @@ class LasingOnCharacterization(object):
         """
         if not self.num_bunches:
             self.num_bunches=1
-        if not self.snrfilter:
-            self.snrfilter=10
-        if not self.roiwaistthres:
-            self.roiwaistthres=0.2
-        if not self.roiexpand:
-            self.roiexpand=2.5    
-        if not self.islandsplitmethod:
-            self.islandsplitmethod=Constants.DEFAULT_SPLIT_METHOD       
-        if not self.islandsplitpar1:        
-            self.islandsplitpar1=3.0
-        if not self.islandsplitpar2:        
-            self.islandsplitpar2=5.0
+        if not self.snr_filter:
+            self.snr_filter=10
+        if not self.roi_waist_thres:
+            self.roi_waist_thres=0.2
+        if not self.roi_expand:
+            self.roi_expand=2.5    
+        if not self.island_split_method:
+            self.island_split_method=Constants.DEFAULT_SPLIT_METHOD       
+        if not self.island_split_par1:        
+            self.island_split_par1=3.0
+        if not self.island_split_par2:        
+            self.island_split_par2=5.0
 
 
     def _loadLasingOffReferenceParameters(self):
@@ -178,20 +183,20 @@ class LasingOnCharacterization(object):
         if self.num_bunches and self.num_bunches != self._lasingoffreference.parameters.num_bunches:
             warnings.warn_explicit('Number of bunches input (%d) differs from number of bunches found in lasing off reference (%d). Overwriting input value.' % (self.num_bunches,self._lasingoffreference.parameters.num_bunches) ,UserWarning,'XTCAV',0)
         self.num_bunches=self._lasingoffreference.parameters.num_bunches
-        if not self.snrfilter:
-            self.snrfilter=self._lasingoffreference.parameters.snrfilter
-        if not self.roiwaistthres:
-            self.roiwaistthres=self._lasingoffreference.parameters.roiwaistthres
-        if not self.roiexpand:
-            self.roiexpand=self._lasingoffreference.parameters.roiexpand
-        if not self.darkreferencepath:
-            self.darkreferencepath=self._lasingoffreference.parameters.darkreferencepath
-        if not self.islandsplitmethod:
-            self.islandsplitmethod=self._lasingoffreference.parameters.islandsplitmethod
-        if not self.islandsplitpar1:        
-            self.islandsplitpar1=self._lasingoffreference.parameters.islandsplitpar1
-        if not self.islandsplitpar2:        
-            self.islandsplitpar2=self._lasingoffreference.parameters.islandsplitpar2 
+        if not self.snr_filter:
+            self.snr_filter=self._lasingoffreference.parameters.snr_filter
+        if not self.roi_waist_thres:
+            self.roi_waist_thres=self._lasingoffreference.parameters.roi_waist_thres
+        if not self.roi_expand:
+            self.roi_expand=self._lasingoffreference.parameters.roi_expand
+        if not self.dark_reference_path:
+            self.dark_reference_path=self._lasingoffreference.parameters.dark_reference_path
+        if not self.island_split_method:
+            self.island_split_method=self._lasingoffreference.parameters.island_split_method
+        if not self.island_split_par1:        
+            self.island_split_par1=self._lasingoffreference.parameters.island_split_par1
+        if not self.island_split_par2:        
+            self.island_split_par2=self._lasingoffreference.parameters.island_split_par2 
 
 
     def processEvent(self, evt):
@@ -222,7 +227,7 @@ class LasingOnCharacterization(object):
         self._ebeam = self._ebeam_data.get(evt)
         self._gasdetector = self._gasdetector_data.get(evt)
 
-        shot_to_shot = xtup.GetShotToShotParameters(self._ebeam, self._gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+        shot_to_shot = xtup.getShotToShotParameters(self._ebeam, self._gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         
         if not shot_to_shot.valid: #If the information is not good, we skip the event
             return False 
@@ -244,7 +249,7 @@ class LasingOnCharacterization(object):
             return False
 
         #Using all the available data, perform the retrieval for that given shot        
-        self._pulse_characterization = xtu.ProcessLasingSingleShot(self._image_profile, self._lasingoffreference.averaged_profiles) 
+        self._pulse_characterization = xtu.processLasingSingleShot(self._image_profile, self._lasingoffreference.averaged_profiles) 
         return True if self._pulse_characterization else False
 
         
@@ -295,9 +300,10 @@ class LasingOnCharacterization(object):
         if not self._pulse_characterization:
             warnings.warn_explicit('Pulse characterization not created for current event due to issues with image',UserWarning,'XTCAV',0)
             
-        return self._pulse_characterization       
+        return self._pulse_characterization 
+
             
-    def pulseDelay(self,method='RMSCOM'):    
+    def pulseDelay(self, method='COM'):    
         """
         Method which returns the time of lasing for each bunch based on the x-ray reconstruction. They delays are referred to the center of mass of the total current. The order of the delays goes from higher to lower energy electron bunches.
         Args:
@@ -322,8 +328,6 @@ class LasingOnCharacterization(object):
                 power = self._pulse_characterization.powerERMS[j]
             elif method=='COM':
                 power = self._pulse_characterization.powerECOM[j]
-            elif method=='RMSCOM':
-                power = (self._pulse_characterization.powerECOM[j] + self._pulse_characterization.powerERMS[j])/2
             else:
                 warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
                 return None      
@@ -337,8 +341,9 @@ class LasingOnCharacterization(object):
                 return None 
             
         return peakpos
+
             
-    def pulseFWHM(self,method='RMSCOM'):    
+    def pulseFWHM(self, method='COM'):    
         """
         Method which returns the FWHM of the pulse generated by each bunch in fs. It uses the power profile. The order of the widths goes from higher to lower energy electron bunches.
         Args:
@@ -363,8 +368,6 @@ class LasingOnCharacterization(object):
                 power = self._pulse_characterization.powerERMS[j]
             elif method=='COM':
                 power = self._pulse_characterization.powerECOM[j]
-            elif method=='RMSCOM':
-                power = (self._pulse_characterization.powerECOM[j] + self._pulse_characterization.powerERMS[j])/2
             else:
                 warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
                 return None   
@@ -411,6 +414,7 @@ class LasingOnCharacterization(object):
                 return None 
             
         return peakpos
+
         
     def interBunchPulseDelayBasedOnCurrentMultiple(self, n=1, filterwith=7):    
         """
@@ -672,10 +676,10 @@ class LasingOnCharacterization(object):
 
 LasingOnParameters = xtu.namedtuple('LasingOnParameters', 
     ['num_bunches', 
-    'snrfilter', 
-    'roiwaistthres', 
-    'roiexpand', 
-    'islandsplitmethod',
-    'islandsplitpar1', 
-    'islandsplitpar2'])   
+    'snr_filter', 
+    'roi_waist_thres', 
+    'roi_expand', 
+    'island_split_method',
+    'island_split_par1', 
+    'island_split_par2'])   
         

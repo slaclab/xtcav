@@ -1,7 +1,7 @@
 import numpy as np
 from Utils import *
 
-def SplitImage(image, n, islandsplitmethod, par1, par2):
+def splitImage(image, n, islandsplitmethod, par1, par2):
     """
     Split an XTCAV image depending of different bunches. This function needs to be expanded
     Arguments:

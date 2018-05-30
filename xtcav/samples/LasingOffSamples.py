@@ -48,7 +48,7 @@ class LasingOffSamples(object):
             num_groups=5 ,           #Number of profiles to average together
             snrfilter=10,           #Number of sigmas for the noise threshold
             roiwaistthres=0.2,      #Parameter for the roi location
-            roiexpand=2.5,          #Parameter for the roi location
+            roiexpand=1,          #Parameter for the roi location
             islandsplitmethod = 'scipyLabel',      #Method for island splitting
             islandsplitpar1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
             islandsplitpar2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
@@ -130,6 +130,7 @@ class LasingOffSamples(object):
             data["yRMSslice"] = image_profile.image_stats[0].yRMSslice
             data["ebeamcharge"] = shot_to_shot.ebeamcharge
             data["dumpe"] = self.global_calibration.dumpe
+            data["img"] = processed_img
             data.update(dict(vars(image_profile.physical_units)))
 
             image_profiles.append(data)

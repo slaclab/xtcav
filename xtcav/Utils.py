@@ -1,7 +1,6 @@
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 #Functions related with the XTCAV pulse retrieval
 import numpy as np
-#
 import scipy.interpolate
 import time
 import warnings
@@ -14,44 +13,11 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn import metrics
 import collections
 import SplittingUtils as su
-
 import scipy.ndimage as im 
+import collections
 
 
-def GetImageStatistics(image, x, y):
-    imFrac=np.sum(image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
-    xProfile=np.sum(image,0)  #Profile projected onto the x axis
-    yProfile=np.sum(image,1)  #Profile projected onto the y axis
-    
-    xCOM=np.dot(xProfile,np.transpose(x))/imFrac        #X position of the center of mass
-    xRMS= np.sqrt(np.dot((x-xCOM)**2,xProfile)/imFrac); #Standard deviation of the values in x
-    ind=np.where(xProfile >= np.amax(xProfile)/2)[0];   
-    xFWHM=np.abs(ind[-1]-ind[0]+1);                     #FWHM of the X profile
-
-    yCOM=np.dot(yProfile,y)/imFrac                      #Y position of the center of mass
-    yRMS= np.sqrt(np.dot((y-yCOM)**2,yProfile)/imFrac); #Standard deviation of the values in y
-    ind=np.where(yProfile >= np.amax(yProfile)/2);
-    yFWHM=np.abs(ind[-1]-ind[0])                        #FWHM of the Y profile
-    
-    yCOMslice=divideNoWarn(np.dot(np.transpose(image),y),xProfile,yCOM);   #Y position of the center of mass for each slice in x
-    distances=np.outer(np.ones(yCOMslice.shape[0]),y)-np.outer(yCOMslice,np.ones(image.shape[0]))    #For each point of the image, the distance to the y center of mass of the corresponding slice
-    yRMSslice= divideNoWarn(np.sum(np.transpose(image)*((distances)**2),1),xProfile,0)         #Width of the distribution of the points for each slice around the y center of masses                  
-    yRMSslice = np.sqrt(yRMSslice)
-    
-    if imFrac==0:   #What to to if the image was effectively full of zeros
-        xCOM=float(x[-1]+x[0])/2
-        xRMS=0
-        xFWHM=0
-        yCOM=float(y[-1]+y[0])/2
-        yRMS=0
-        yFWHM=0
-        yCOMslice[np.isnan(yCOMslice)]=yCOM
-
-    return ImageStatistics(imFrac, xProfile, yProfile, xCOM,
-        yCOM, xRMS, yRMS, xFWHM, yFWHM, yCOMslice, yRMSslice)
-
-
-def ProcessXTCAVImage(image,ROI):
+def getImageStatistics(image, ROI):
     """
     Obtain the statistics (profiles, center of mass, etc) of an xtcav image. 
     Arguments:
@@ -60,17 +26,47 @@ def ProcessXTCAVImage(image,ROI):
     Output:
         imageStats: list with the image statistics for each bunch in the image
     """
-    #obtain the number of bunches for the image. In principle this should be equal to n    
-    nb=image.shape[0]
+
+    num_bunches = image.shape[0]
     #For the image for each bunch we retrieve the statistics and add them to the list    
     imageStats=[]    
-    for i in range(nb):
-        imageStats.append(GetImageStatistics(image[i,:,:],ROI.x,ROI.y))
+    for i in range(num_bunches):
+        cur_image = image[i, :, :]
+        imFrac = np.sum(cur_image)    #Total area of the image: Since the original image is normalized, this should be on for on bunch retrievals, and less than one for multiple bunches
+        
+        xProfile = np.sum(cur_image, axis=0)  #Profile projected onto the x axis
+        yProfile = np.sum(cur_image, axis=1)  #Profile projected onto the y axis
+        
+        xCOM = np.dot(xProfile,np.transpose(ROI.x))/imFrac        #X position of the center of mass
+        xRMS = np.sqrt(np.dot((ROI.x-xCOM)**2,xProfile)/imFrac) #Standard deviation of the values in x
+        ind = np.where(xProfile >= np.amax(xProfile)/2)[0]   
+        xFWHM = np.abs(ind[-1]-ind[0]+1)                     #FWHM of the X profile
+
+        yCOM = np.dot(yProfile,ROI.y)/imFrac                      #Y position of the center of mass
+        yRMS = np.sqrt(np.dot((ROI.y-yCOM)**2,yProfile)/imFrac) #Standard deviation of the values in y
+        ind = np.where(yProfile >= np.amax(yProfile)/2)
+        yFWHM = np.abs(ind[-1]-ind[0])                        #FWHM of the Y profile
+        
+        yCOMslice = divideNoWarn(np.dot(np.transpose(cur_image),ROI.y), xProfile, yCOM)   #Y position of the center of mass for each slice in x
+        distances = np.outer(np.ones(yCOMslice.shape[0]),ROI.y)-np.outer(yCOMslice,np.ones(cur_image.shape[0]))    #For each point of the image, the distance to the y center of mass of the corresponding slice
+        yRMSslice =  divideNoWarn(np.sum(np.transpose(cur_image)*((distances)**2), axis=1), xProfile, 0)         #Width of the distribution of the points for each slice around the y center of masses                  
+        yRMSslice = np.sqrt(yRMSslice)
+        
+        if imFrac == 0:   #What to do if the image was effectively full of zeros
+            xCOM = float(ROI.x[-1]+ROI.x[0])/2
+            yCOM = float(ROI.y[-1]+ROI.y[0])/2
+            yCOMslice[np.isnan(yCOMslice)] = yCOM
+
+            imageStats.append(ImageStatistics(imFrac, xProfile, yProfile, xCOM, yCOM, yCOMslice, yRMSslice))
+            continue
+
+        imageStats.append(ImageStatistics(imFrac, xProfile, yProfile, xCOM,
+            yCOM, xRMS, yRMS, xFWHM, yFWHM, yCOMslice, yRMSslice))
         
     return imageStats
     
 
-def GetCenterOfMass(image,x,y):
+def getCenterOfMass(image,x,y):
     """
     Gets the center of mass of an image 
     Arguments:
@@ -79,15 +75,15 @@ def GetCenterOfMass(image,x,y):
     Output:
       x0,y0 coordinates of the center of mass 
     """
-    profilex=np.sum(image,0);     
-    x0=np.dot(profilex,np.transpose(x))/np.sum(profilex)
-    profiley=np.sum(image,1);     
-    y0=np.dot(profiley,y)/np.sum(profiley)
+    profilex = np.sum(image, axis=0)     
+    x0 = np.dot(profilex, np.transpose(x))/np.sum(profilex)
+    profiley = np.sum(image, axis=1);     
+    y0 = np.dot(profiley, y)/np.sum(profiley)
     
     return x0,y0
     
     
-def SubtractBackground(image, ROI, dark_background):
+def subtractBackground(image, ROI, dark_background):
     """
     Obtain all the statistics (profiles, center of mass, etc) of an image
     Arguments:
@@ -104,18 +100,19 @@ def SubtractBackground(image, ROI, dark_background):
         image_db = dark_background.image
         ROI_db = dark_background.ROI
         minX = ROI.x0 - ROI_db.x0
-        maxX=(ROI.x0+ROI.xN-1)-ROI_db.x0
-        minY=ROI.y0-ROI_db.y0
-        maxY=(ROI.y0+ROI.yN-1)-ROI_db.y0
+        maxX = (ROI.x0+ROI.xN-1)-ROI_db.x0
+        minY = ROI.y0-ROI_db.y0
+        maxY = (ROI.y0+ROI.yN-1)-ROI_db.y0
+
         try:    
-            image=image-image_db[minY:(maxY+1),minX:(maxX+1)]
+            image = image-image_db[minY:(maxY+1),minX:(maxX+1)]
         except ValueError:
             warnings.warn_explicit('Dark background ROI not large enough for image. Image will not be background subtracted',UserWarning,'XTCAV',0)
        
     return image
 
     
-def DenoiseImage(image, snrfilter):
+def denoiseImage(image, snrfilter):
     """
     Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
     Arguments:
@@ -130,7 +127,7 @@ def DenoiseImage(image, snrfilter):
     filtered = cv2.GaussianBlur(image, (5, 5), 0)
 
     if np.sum(filtered) <= 0:
-        warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction',UserWarning,'XTCAV',0)
+        warnings.warn_explicit('Image Completely Empty After Backgroud Subtraction', UserWarning,'XTCAV',0)
         return None, None
     
     #Obtaining the mean and the standard deviation of the noise by using pixels only on the border
@@ -143,25 +140,36 @@ def DenoiseImage(image, snrfilter):
         warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
         return None, None
      #We make sure it is not just noise by checking that at least .1% of pixels are not empty
-    if float(np.count_nonzero(mask))/np.size(mask) < 0.001: 
-        warnings.warn_explicit('< 0.1%% of pixels are non-zero after denoising. Image will not be used',UserWarning,'XTCAV',0)
+    if float(np.count_nonzero(mask))/np.size(mask) < Constants.VALID_PIXEL_PERCENTAGE: 
+        warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' % Constants.VALID_PIXEL_PERCENTAGE*10,UserWarning,'XTCAV',0)
         return None, None
 
     return mask, mean
 
-def MaskImage(img, mean, masks, roi):
-    #crop to roi, zero out noise and negative values, normalize image
+
+def maskImage(img, mean, masks, roi):
+    """
+    Crop to roi; zero out noise and negative values; normalize image so that all values sum to 1
+    Arguments:
+      image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
+      mean: mean of noise region in image
+      masks: filter with 1 in areas where we keep pixel value and 0 where we "zero-out" pixel value
+      roi: region of interest
+    Output
+      image: masked images (each bunch is on its own)
+    """
+    
     croppedimg = img[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
     croppedimg -= mean
+    output = np.zeros(masks.shape)
     for i in range(masks.shape[0]):
-        copy = croppedimg
-        copy[np.logical_or(masks[i] == 0, croppedimg < 0)] = 0
-        masks[i] = copy
-    masks = masks/np.sum(masks)
-    return masks
+        output[i] = croppedimg
+        output[i][np.logical_or(masks[i] == 0, croppedimg < 0)] = 0
+    output = output/np.sum(output)
+    return output
 
 
-def FindROI(masks, ROI, threshold, expandfactor=1):
+def findROI(masks, ROI, threshold, expandfactor=1):
     """
     Find the subroi of the image
     Arguments:
@@ -202,7 +210,7 @@ def FindROI(masks, ROI, threshold, expandfactor=1):
     return masks[:,ind1Y:ind2Y,ind1X:ind2X], outROI
 
 
-def CalculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
+def calculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     valid=1
     yMeVPerPix = global_calibration.umperpix*global_calibration.dumpe/global_calibration.dumpdisp*1e-3          #Spacing of the y axis in MeV
     
@@ -243,31 +251,29 @@ def processImage(img, parameters, dark_background, global_calibration,
             return None, None
 
         #Subtract the dark background, taking into account properly possible different ROIs, if it is available
-        img_db = SubtractBackground(img, roi, dark_background) 
+        img_db = subtractBackground(img, roi, dark_background) 
         croppedimg =  img_db[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
 
-        mask, mean = DenoiseImage(croppedimg, parameters.snrfilter)                    #Remove noise from the image and normalize it
-        if mask is None:                                        #If there is nothing in the image we skip the event  
+        mask, mean = denoiseImage(croppedimg, parameters.snr_filter)                    #Remove noise from the image and normalize it
+        if mask is None:   #If there is nothing in the image we skip the event  
             return None, None
 
-        masks = su.SplitImage(mask, parameters.num_bunches, parameters.islandsplitmethod, 
-            parameters.islandsplitpar1, parameters.islandsplitpar2)#new
+        masks = su.splitImage(mask, parameters.num_bunches, parameters.island_split_method, 
+            parameters.island_split_par1, parameters.island_split_par2)#new
         
-        if masks is None:                                        #If there is nothing in the image we skip the event  
+        if masks is None:  #If there is nothing in the image we skip the event  
             return None, None
 
         num_bunches_found = masks.shape[0]
         if parameters.num_bunches != num_bunches_found:
-            warnings.warn_explicit('Incorrect number of bunches detected in image.',UserWarning,'XTCAV',0)
+            warnings.warn_explicit('Incorrect number of bunches detected in image.', UserWarning, 'XTCAV',0)
             return None, None
 
-        masks, roi = FindROI(masks, roi, parameters.roiwaistthres, parameters.roiexpand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        masks, roi = findROI(masks, roi, parameters.roi_waist_thres, parameters.roi_expand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        processed_image = maskImage(img_db, mean, masks, roi)
+        image_stats = getImageStatistics(processed_image, roi)          #Obtain the different properties and profiles from the trace               
         
-        processed_image = MaskImage(img_db, mean, masks, roi)
-
-        image_stats = ProcessXTCAVImage(processed_image, roi)          #Obtain the different properties and profiles from the trace               
-        
-        physical_units = CalculatePhyscialUnits(roi,(image_stats[0].xCOM,image_stats[0].yCOM), shot_to_shot, global_calibration)   
+        physical_units = calculatePhyscialUnits(roi,(image_stats[0].xCOM,image_stats[0].yCOM), shot_to_shot, global_calibration)   
         if not physical_units.valid:
             return None, None
 
@@ -275,14 +281,13 @@ def processImage(img, parameters, dark_background, global_calibration,
         if physical_units.xfsPerPix < 0:
             physical_units = physical_units._replace(xfs = physical_units.xfs[::-1])
             for j in range(num_bunches_found):
-                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1])
-                image_stats[j] = image_stats[j]._replace(yCOMslice = image_stats[j].yCOMslice[::-1])
-                image_stats[j] = image_stats[j]._replace(yRMSslice = image_stats[j].yRMSslice[::-1])
+                image_stats[j] = image_stats[j]._replace(xProfile = image_stats[j].xProfile[::-1], 
+                    yCOMslice = image_stats[j].yCOMslice[::-1], yRMSslice = image_stats[j].yRMSslice[::-1])
 
         return ImageProfile(image_stats, roi, shot_to_shot, physical_units), processed_image
 
 
-def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
+def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
     """
     Process a single shot profiles, using the no lasing references to retrieve the x-ray pulse(s)
     Arguments:
@@ -339,7 +344,7 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         dt_old=physical_units.xfs[1]-physical_units.xfs[0] # dt before interpolation 
         
-        eCurrent=image_stats[j].xProfile/(dt_old*1e-15)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
+        eCurrent=image_stats[j].xProfile/(dt_old*Constants.FS_TO_S)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
         
         eCOMslice=(image_stats[j].yCOMslice-image_stats[j].yCOM)*physical_units.yMeVPerPix       #Center of mass in energy for each t converted to the right units        
         eRMSslice=image_stats[j].yRMSslice*physical_units.yMeVPerPix                               #Energy dispersion for each t converted to the right units
@@ -393,8 +398,8 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*1e-15))/Nelectrons   #In J                           
-    escalefactor=np.sum(powerERMS)*dt*1e-15                 #in J
+    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
+    escalefactor=np.sum(powerERMS)*dt*Constants.FS_TO_S                 #in J
     
     
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
@@ -402,8 +407,8 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
         powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
-        eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*1e-15*1e9
-        eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*1e-15*1e9
+        eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*Constants.FS_TO_S*1e9
+        eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*Constants.FS_TO_S*1e9
                     
     return PulseCharacterization(t, powerrawECOM, powerrawERMS, powerECOM, 
         powerERMS, powerAgreement, bunchdelay, bunchdelaychange, shot_to_shot.xrayenergy, 
@@ -411,7 +416,7 @@ def ProcessLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
+def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarchical'):
     """
     Cluster together profiles of xtcav images
     Arguments:
@@ -469,13 +474,27 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
 
         if num_profiles == 1:
             groups = np.array([0]) 
-        #for debugging. can remove
+        #for debugging. can remove without repercussions
         elif num_clusters == num_profiles:
             groups = np.array(list(range(num_profiles)))
-        else:     
-            model = AgglomerativeClustering(n_clusters=num_clusters, linkage="ward", affinity="euclidean")
-            model.fit(profilesT)
-            groups = model.labels_
+        else: 
+            if method.lower() == 'hierarchical':
+                groups = hierarchicalClustering(profilesT, num_clusters)
+            elif method.lower() == 'old':
+                groups = oldGroupingMethod(profilesT, num_clusters)
+            elif method.lower() == 'svd':
+                num_features=10
+                u, s, v = np.linalg.svd(profilesT.T)
+                W = u[:, 0:num_features - 1]
+                newX = np.matmul(profilesT, W)
+                groups = hierarchicalClustering(newX, num_clusters)
+            elif method.lower() == 'cosine':
+                groups = hierarchicalClustering(profilesT, num_clusters, distance='cosine')
+            else:
+                print "Clustering method ", method, " not supported. Using hierarchical"
+                groups = hierarchicalClustering(profilesT, num_clusters)
+        num_clusters = max(groups) + 1
+
 
     #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
 
@@ -512,7 +531,7 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
             
             for i in range(num_in_cluster):
                 dt_old=sublist_physical_units[i].xfs[1]-sublist_physical_units[i].xfs[0] # dt before interpolation   
-                eCurrent=sublist_image_stats[i][j].xProfile/(dt_old*1e-15)*num_electrons[i]                              #Electron current in electrons/s   
+                eCurrent=sublist_image_stats[i][j].xProfile/(dt_old*Constants.FS_TO_S)*num_electrons[i]                              #Electron current in electrons/s   
 
                 eCOMslice=(sublist_image_stats[i][j].yCOMslice-sublist_image_stats[i][j].yCOM)*sublist_physical_units[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
                 eRMSslice=sublist_image_stats[i][j].yRMSslice*sublist_physical_units[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
@@ -535,10 +554,51 @@ def AverageXTCAVProfilesGroups(list_image_profiles, num_groups):
         averageERMS, num_bunches, eventTime, eventFid)
 
 
+def oldGroupingMethod(profilesT, num_groups):
+    num_profiles = profilesT.shape[0]
+    shots_per_group = int(np.ceil(float(num_profiles)/num_groups))
+    
+    group = np.zeros(num_profiles, dtype=np.int32)       #array that will indicate which group each profile sill correspond to
+    group[:]=-1                             #initiated to -1
+    for g in range(num_groups):                     #For each group
+        currRef=np.where(group==-1)[0]  
+        if currRef.size == 0:
+            continue
+        currRef=currRef[0]                  #We pick the first member to be the first one that has not been assigned to a group yet
+
+        group[currRef]=g                   #We assign it the current group
+
+        # We calculate the correlation of the first profile to the rest of available profiles
+        err = np.zeros(num_profiles, dtype=np.float64);              
+        for i in range(currRef, num_profiles): 
+            if group[i] == -1:
+                err[i] = np.corrcoef(profilesT[currRef,:],profilesT[i,:])[0,1]**2;
+
+        #The 'shots_per_group-1' profiles with the highest correlation will be also assigned to the same group
+        order=np.argsort(err)            
+        for i in range(0, min(shots_per_group-1, len(order))): 
+            group[order[-(1+i)]]=g
+    return group
+
+
+def hierarchicalClustering(profilesT, num_clusters, distance='euclidean'):
+    linkage = 'ward' if distance == 'euclidean' else 'average'
+    model = AgglomerativeClustering(n_clusters=num_clusters, linkage=linkage, affinity=distance)
+    model.fit(profilesT)
+    return model.labels_
+
+
 def findOptGroups(X, B, max_num):
+    """
+    Helper function to find optimal # of groups for profiles 
+    Arguments:
+      X: profiles to group
+      B: number of reference groups to generate
+      max_num: maximum number of groups allowed
+    Output
+      opt: the optimal number of groups for this data
+    """
     num_profiles, t = X.shape
-    if num_profiles == 1:
-        return 1
     rand_cluster_variance = {}
     true_cluster_variance = {}
     sd = {}
@@ -548,32 +608,49 @@ def findOptGroups(X, B, max_num):
     u,d,vt = np.linalg.svd(centered)
     x_ = np.matmul(centered, vt.T)
     bounding_box = getBoundingBox(x_)
-    for i in range(2, max_num+1):
-        model = AgglomerativeClustering(n_clusters=i, linkage="ward", affinity="euclidean")
-        model.fit(X)
-        true_cluster_variance[i] = np.log(calcClusterVariance(model.labels_, X, i))
-        rand_variance = []
-        #generate B random reference datasets
-        for k in range(B):
-            rand_sample = generateRandSample(bounding_box, num_profiles)
-            rand_sample = np.matmul(rand_sample, vt) + column_mean
-            model.fit(rand_sample)
-            rand_variance.append(np.log(calcClusterVariance(model.labels_, rand_sample, i)))
-        rand_cluster_variance[i] = np.mean(rand_variance)
-        sd[i] = np.std(rand_variance)* np.sqrt(1+1./B)
+    min_clusters = 2
+    max_clusters = max_num
     gap_statistic = {}
-    for k,v in true_cluster_variance.iteritems():
-        gap_statistic[k] = rand_cluster_variance[k] - v
-    return chooseClusters(gap_statistic, sd, max_num)
+    sd = {}
+    reference_sets = []
+    for i in range(B):
+        rand_sample = generateRandSample(bounding_box, num_profiles)
+        rand_sample = np.matmul(rand_sample, vt) + column_mean
+        reference_sets.append(rand_sample)
+        
+    gap_statistic[min_clusters], sd[min_clusters] = calcGapStatistic(min_clusters, X, reference_sets)
+    gap_statistic[max_clusters], sd[max_clusters] = calcGapStatistic(max_clusters, X, reference_sets)
+    while True:
+        mid1 = (max_clusters - min_clusters)/2 + min_clusters
+        if mid1 == max_clusters or mid1 == min_clusters:
+            break
+        if not gap_statistic.get(mid1):
+            gap_statistic[mid1], sd[mid1] = calcGapStatistic(mid1, X, reference_sets)
+        if not gap_statistic.get(mid1-1):
+            gap_statistic[mid1-1], sd[mid1-1] = calcGapStatistic(mid1-1, X, reference_sets)
+        if gap_statistic[mid1] - sd[mid1] < gap_statistic[mid1-1]:
+            max_clusters = mid1
+        else:
+            min_clusters = mid1
+    opt = max_clusters if gap_statistic[max_clusters] - sd[max_clusters] > gap_statistic[max_clusters -1] else min_clusters
+    return opt
 
 
-def chooseClusters(gap_statistic, sd, max_num):
-    prev = 0
-    for i in range(2, max_num+1):
-        if  gap_statistic[i]- sd[i] < prev:
-            return i - 1
-        prev = gap_statistic[i]
-    return max_num
+def calcGapStatistic(n, X, reference_sets):
+    B = len(reference_sets)
+    model = AgglomerativeClustering(n_clusters=n, linkage="ward", affinity="euclidean")
+    model.fit(X)
+    true_cluster_variance = np.log(calcClusterVariance(model.labels_, X, n))
+    rand_variance = []
+    num_profiles = X.shape[0]
+    #generate B random reference datasets
+    for k in range(B):        
+        model.fit(reference_sets[k])
+        rand_variance.append(np.log(calcClusterVariance(model.labels_, reference_sets[k], n)))
+    rand_cluster_variance = np.mean(rand_variance)
+    sd = np.std(rand_variance)* np.sqrt(1+1./B)
+    gap_statistic = rand_cluster_variance - true_cluster_variance
+    return gap_statistic, sd
 
 
 def calcClusterVariance(assignments, data, num_clusters):
@@ -585,12 +662,12 @@ def calcClusterVariance(assignments, data, num_clusters):
     return d
 
 
-def getBoundingBox(X):
-    return [(min(X[:,i]), max(X[:,i])) for i in range(X.shape[1])]
-
-
 def generateRandSample(bounding_box, num_profiles):
     return np.apply_along_axis(lambda l : np.random.uniform(l[0], l[1], num_profiles), 1, bounding_box).T
+
+
+def getBoundingBox(X):
+    return [(min(X[:,i]), max(X[:,i])) for i in range(X.shape[1])]
 
 # http://stackoverflow.com/questions/26248654/numpy-return-0-with-divide-by-zero
 def divideNoWarn(numer,denom,default):
@@ -598,6 +675,7 @@ def divideNoWarn(numer,denom,default):
         ratio=numer/denom
         ratio[ ~ np.isfinite(ratio)]=default  # NaN/+inf/-inf 
     return ratio
+
 
 def namedtuple(typename, field_names, default_values=()):
     """
@@ -645,7 +723,12 @@ ImageStatistics = namedtuple('ImageStatistics',
     'xFWHM',
     'yFWHM',
     'yCOMslice',
-    'yRMSslice'])
+    'yRMSslice'],
+    {'xRMS': 0,
+     'yRMS': 0,
+     'xFWHM': 0,
+     'yFWHM': 0,
+     })
 
 
 PhysicalUnits = namedtuple('PhysicalUnits', 

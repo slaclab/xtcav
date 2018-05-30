@@ -1,8 +1,8 @@
 from LasingOffSamples import *
 
 LasingOffSamples(
-	experiment='amox23616',
-	run_number='79',
+	experiment='diamcc14',
+	run_number='574',
 	num_bunches=1,
 	maxshots=50)
 

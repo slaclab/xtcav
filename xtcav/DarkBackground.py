@@ -20,29 +20,29 @@ from Utils import namedtuple, ROIMetrics
     Arguments:
         experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
         run (str): String with a run number. E.g. '123' 
-        maxshots (int): Maximum number of images to use for the reference.
-        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
-        validityrange (tuple): If not set, the validity range for the reference will go from the 
+        max_shots (int): Maximum number of images to use for the reference.
+        calibration_path (str): Custom calibration directory in case the default is not intended to be used.
+        validity_range (tuple): If not set, the validity range for the reference will go from the 
         first run number used to generate the reference and the last run.
 """
 
 class DarkBackground(object):
     def __init__(self, 
         experiment='amoc8114', 
-        maxshots=401, 
+        max_shots=401, 
         run_number='86', 
         start_image=0,
-        validityrange=None, 
-        calibrationpath='',
-        savetofile=True):
+        validity_range=None, 
+        calibration_path='',
+        save_to_file=True):
 
         self.image=[]
         self.ROI=None
         self.n=0
 
         self.parameters = DarkBackgroundParameters(
-            experiment = experiment, maxshots = maxshots, run = run_number, 
-            validityrange = validityrange, calibrationpath = calibrationpath)
+            experiment = experiment, max_shots = max_shots, run_number = run_number, 
+            validity_range = validity_range, calibration_path = calibration_path)
 
         
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
@@ -54,11 +54,11 @@ class DarkBackground(object):
         """
         print 'dark background reference'
         print '\t Experiment: %s' % self.parameters.experiment
-        print '\t Run: %s' % self.parameters.run
-        print '\t Valid shots to process: %d' % self.parameters.maxshots
+        print '\t Run: %s' % self.parameters.run_number
+        print '\t Valid shots to process: %d' % self.parameters.max_shots
         
         #Loading the dataset from the "dark" run, this way of working should be compatible with both xtc and hdf5 files
-        dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
+        dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number))
         
         #Camera and type for the xtcav images
         xtcav_camera = psana.Detector(Cn.SRC)
@@ -76,11 +76,6 @@ class DarkBackground(object):
         times = run.times()  
         for t in range(first_image, len(times)):
             evt=run.event(times[t])
-        
-            #ignore shots without xtcav, because we can get incorrect EPICS information (e.g. ROI).  this is
-            #a workaround for the fact that xtcav only records epics on shots where it has camera data, as well
-            #as an incorrect design in psana where epics information is not stored per-shot (it is in a more global object
-            #called "Env")
             img = xtcav_camera.image(evt)
 
             # skip if empty image
@@ -91,23 +86,23 @@ class DarkBackground(object):
             n += 1
                 
             if n % 5 == 0:
-                sys.stdout.write('\r%.1f %% done, %d / %d' % (float(n) / self.parameters.maxshots*100, n, self.parameters.maxshots ))
+                sys.stdout.write('\r%.1f %% done, %d / %d' % (float(n) / self.parameters.max_shots*100, n, self.parameters.max_shots ))
                 sys.stdout.flush()   
-            if n >= self.parameters.maxshots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
+            if n >= self.parameters.max_shots:                    #After a certain number of shots we stop (Ideally this would be an argument, rather than a hardcoded value)
                 break                          
         #At the end of the program the total accumulator is saved 
         sys.stdout.write('\nMaximum number of images processed\n') 
         self.image=accumulator_xtcav/n
         self.ROI=roi_xtcav
         
-        if not self.parameters.validityrange:
-            self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
-        elif type(self.parameters.validityrange) == int:
-            self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
+        if not self.parameters.validity_range:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.run_number, 'end'))
+        elif type(self.parameters.validity_range) == int:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range, 'end'))
          
-        if savetofile:
-            cp = CalibrationPaths(dataSource.env(), self.parameters.calibrationpath)
-            file = cp.newCalFileName(Cn.DB_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
+        if save_to_file:
+            cp = CalibrationPaths(dataSource.env(), self.parameters.calibration_path)
+            file = cp.newCalFileName(Cn.DB_FILE_NAME, self.parameters.validity_range[0], self.parameters.validity_range[1])
             self.save(file)
 
     
@@ -123,7 +118,7 @@ class DarkBackground(object):
             # skip if empty image
             if img is None: 
                 continue
-            roi_xtcav = xtup.GetXTCAVImageROI(evt)
+            roi_xtcav = xtup.getXTCAVImageROI(evt)
             
             if not roi_xtcav:
                 continue
@@ -146,7 +141,7 @@ class DarkBackground(object):
         try:
             obj.ROI = ROIMetrics(**obj.ROI)
             obj.parameters = DarkBackgroundParameters(**obj.parameters)
-        except AttributeError:
+        except (AttributeError, TypeError):
             print "Could not load Dark Reference with path "+ path+". Try recreating dark reference " +\
             "to ensure compatability between versions"
             return None
@@ -154,7 +149,7 @@ class DarkBackground(object):
 
 DarkBackgroundParameters = namedtuple('DarkBackgroundParameters', 
     ['experiment', 
-    'maxshots', 
-    'run', 
-    'validityrange', 
-    'calibrationpath'])
+     'max_shots', 
+     'run_number', 
+     'validity_range', 
+     'calibration_path'])

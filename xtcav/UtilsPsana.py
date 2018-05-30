@@ -5,7 +5,7 @@ import time
 from Utils import ROIMetrics, GlobalCalibration, ShotToShotParameters
 import Constants
 
-def GetCameraSaturationValue(evt):
+def getCameraSaturationValue(evt):
     try:
         analysis_version = psana.Detector(Constants.ANALYSIS_VERSION)
         if analysis_version(evt) is not None:
@@ -16,7 +16,7 @@ def GetCameraSaturationValue(evt):
     return (1<<14)-1
     
 
-def GetGlobalXTCAVCalibration(evt):
+def getGlobalXTCAVCalibration(evt):
     """
     Obtain the global XTCAV calibration form the epicsStore
     Arguments:
@@ -49,7 +49,7 @@ def GetGlobalXTCAVCalibration(evt):
     return global_calibration
                           
 
-def GetXTCAVImageROI(evt):
+def getXTCAVImageROI(evt):
 
     roiXN=psana.Detector(Constants.ROI_SIZE_X)
     roiX=psana.Detector(Constants.ROI_START_X)
@@ -71,7 +71,7 @@ def GetXTCAVImageROI(evt):
     return ROIMetrics(xN, x0, yN, y0, x, y) 
 
 
-def GetShotToShotParameters(ebeam, gasdetector, evt_id):
+def getShotToShotParameters(ebeam, gasdetector, evt_id):
     time = evt_id.time()
     sec  = time[0]
     nsec = time[1]
@@ -92,7 +92,7 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
                 xtcavrfphase = xtcavrfphase, xtcavrfamp = xtcavrfamp, 
                 dumpecharge = dumpecharge, xrayenergy = 1e-3*energydetector, 
                 unixtime = unixtime, fiducial = fiducial)     
-        else:   #Some hardcoded values
+        else:   
             warnings.warn_explicit('No gas detector info',UserWarning,'XTCAV',0)
                 
     else:    
@@ -102,7 +102,12 @@ def GetShotToShotParameters(ebeam, gasdetector, evt_id):
         
 
 
-def DivideImageTasks(first_image, last_image, rank, size):
+def divideImageTasks(first_image, last_image, rank, size):
+    """
+    Split image numbers among cores based on number of cores and core ID
+    The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
+    e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
+    """
     num_shots = last_image - first_image
     if num_shots <= 0:
         return np.empty()

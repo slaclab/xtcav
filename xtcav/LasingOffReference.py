@@ -30,46 +30,46 @@ size = comm.Get_size()
     Attributes:
         experiment (str): String with the experiment reference to use. E.g. 'amoc8114'
         runs (str): String with a run number, or a run interval. E.g. '123'  '134-156' 145,136'
-        maxshots (int): Maximum number of images to use for the references.
+        max_shots (int): Maximum number of images to use for the references.
         start_image (int): image in run to start from
-        validityrange (tuple): If not set, the validity range for the reference will go from the 
+        validity_range (tuple): If not set, the validity range for the reference will go from the 
         first run number used to generate the reference and the last run.
         calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
         num_bunches (int): Number of bunches.
         medianfilter (int): Number of neighbours for median filter.
-        snrfilter (float): Number of sigmas for the noise threshold.
+        snr_filter (float): Number of sigmas for the noise threshold.
         num_groups (int): Number of profiles to average together for each reference.
-        roiwaistthres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
-        roiexpand (float): number of waists that the region of interest around will span around the center of the trace.
-        islandsplitmethod (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
+        roi_waist_thres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
+        roi_expand (float): number of waists that the region of interest around will span around the center of the trace.
+        island_split_method (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
 """
 
 class LasingOffReference(object):
 
     def __init__(self,
             experiment='amoc8114',  #Experiment label
-            maxshots=401,           #Maximum number of valid shots to process
+            max_shots=401,           #Maximum number of valid shots to process
             run_number='86',        #Run number
             start_image=0,          #Starting image in run
-            validityrange=None,
-            darkreferencepath=None, #Dark reference information
+            validity_range=None,
+            dark_reference_path=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
             num_groups=0,        #Number of profiles to average together
-            snrfilter=10,           #Number of sigmas for the noise threshold
-            roiwaistthres=0.2,      #Parameter for the roi location
-            roiexpand=1.5,          #Parameter for the roi location
-            islandsplitmethod = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
-            islandsplitpar1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
-            islandsplitpar2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
-            calpath='',
-            savetofile=True):
+            snr_filter=10,           #Number of sigmas for the noise threshold
+            roi_waist_thres=0.2,      #Parameter for the roi location
+            roi_expand=1.5,          #Parameter for the roi location
+            island_split_method = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
+            island_split_par1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
+            island_split_par2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
+            calibration_path='',
+            save_to_file=True):
 
         self.parameters = LasingOffParameters(experiment = experiment,
-            maxshots = maxshots, run = run_number, start = start_image, validityrange = validityrange, 
-            darkreferencepath = darkreferencepath, num_bunches = num_bunches, num_groups=num_groups, 
-            snrfilter=snrfilter, roiwaistthres=roiwaistthres,
-            roiexpand = roiexpand, islandsplitmethod=islandsplitmethod, islandsplitpar2 = islandsplitpar2,
-            islandsplitpar1=islandsplitpar1, calpath=calpath, version=1)
+            max_shots = max_shots, run_number = run_number, start = start_image, validity_range = validity_range, 
+            dark_reference_path = dark_reference_path, num_bunches = num_bunches, num_groups=num_groups, 
+            snr_filter=snr_filter, roi_waist_thres=roi_waist_thres,
+            roi_expand = roi_expand, island_split_method=island_split_method, island_split_par2 = island_split_par2,
+            island_split_par1=island_split_par1, calibration_path=calibration_path, version=1)
 
 
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
@@ -78,13 +78,13 @@ class LasingOffReference(object):
         if rank == 0:
             print 'Lasing off reference'
             print '\t Experiment: %s' % self.parameters.experiment
-            print '\t Runs: %s' % self.parameters.run
+            print '\t Runs: %s' % self.parameters.run_number
             print '\t Number of bunches: %d' % self.parameters.num_bunches
-            print '\t Valid shots to process: %d' % self.parameters.maxshots
-            print '\t Dark reference run: %s' % self.parameters.darkreferencepath
+            print '\t Valid shots to process: %d' % self.parameters.max_shots
+            print '\t Dark reference run: %s' % self.parameters.dark_reference_path
         
         #Loading the data, this way of working should be compatible with both xtc and hdf5 files
-        dataSource = psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
+        dataSource = psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number))
 
         #Camera for the xtcav images
         xtcav_camera = psana.Detector(Constants.SRC)
@@ -105,12 +105,9 @@ class LasingOffReference(object):
 
         #Calibration values needed to process images. first_event is the index of the first event with valid data
         roi_xtcav, global_calibration, saturation_value, first_event = self._getCalibrationValues(run, xtcav_camera, start_image)
-
-        #  Parallel Processing implementation by andr0s and polo5
-        #  The run will be segmented into chunks of 4 shots, with each core alternatingly assigned to each.
-        #  e.g. Core 1 | Core 2 | Core 3 | Core 1 | Core 2 | Core 3 | ....
+       
         times = run.times()
-        image_numbers = xtup.DivideImageTasks(first_event, len(times), rank, size)
+        image_numbers = xtup.divideImageTasks(first_event, len(times), rank, size)
 
         num_processed = 0 #Counter for the total number of xtcav images processed within the run  
         for t in image_numbers: 
@@ -118,7 +115,7 @@ class LasingOffReference(object):
             ebeam = ebeam_data.get(evt)
             gasdetector = gasdetector_data.get(evt)
 
-            shot_to_shot = xtup.GetShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
+            shot_to_shot = xtup.getShotToShotParameters(ebeam, gasdetector, evt.get(psana.EventId)) #Obtain the shot to shot parameters necessary for the retrieval of the x and y axis in time and energy units
         
             if not shot_to_shot.valid: #If the information is not good, we skip the event
                 continue 
@@ -136,7 +133,7 @@ class LasingOffReference(object):
 
             self._printProgressStatements(num_processed)
 
-            if num_processed >= np.ceil(self.parameters.maxshots/float(size)):
+            if num_processed >= np.ceil(self.parameters.max_shots/float(size)):
                 break
 
         # here gather all shots in one core, add all lists
@@ -150,24 +147,24 @@ class LasingOffReference(object):
         image_profiles = [item for sublist in image_profiles for item in sublist]
 
         #Since there are 12 cores it is possible that there are more references than needed. In that case we discard some
-        if len(image_profiles) > self.parameters.maxshots:
-            image_profiles = image_profiles[0:self.parameters.maxshots]
+        if len(image_profiles) > self.parameters.max_shots:
+            image_profiles = image_profiles[0:self.parameters.max_shots]
         
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
-        averaged_profiles = xtu.AverageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
+        averaged_profiles = xtu.averageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
 
         self.averaged_profiles=averaged_profiles
         self.n=num_processed    
         
         # Set validity range for reference runs
-        if not self.parameters.validityrange:
-            self.parameters = self.parameters._replace(validityrange=(self.parameters.run, 'end'))
-        elif type(self.parameters.validityrange) == int:
-            self.parameters = self.parameters._replace(validityrange=(self.parameters.validityrange, 'end'))
+        if not self.parameters.validity_range:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.run_number, 'end'))
+        elif type(self.parameters.validity_range) == int:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range, 'end'))
 
-        if savetofile:
-            cp = CalibrationPaths(env, self.parameters.calpath)
-            file = cp.newCalFileName(Constants.LOR_FILE_NAME, self.parameters.validityrange[0], self.parameters.validityrange[1])
+        if save_to_file:
+            cp = CalibrationPaths(env, self.parameters.calibration_path)
+            file = cp.newCalFileName(Constants.LOR_FILE_NAME, self.parameters.validity_range[0], self.parameters.validity_range[1])
             self.save(file)
 
 
@@ -175,7 +172,7 @@ class LasingOffReference(object):
         # print core numb and percentage
         if num_processed % 5 == 0:
             extrainfo = '\r' if size == 1 else '\nCore %d: '%(rank + 1)
-            sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(num_processed) / np.ceil(self.parameters.maxshots/float(size)) *100, num_processed, np.ceil(self.parameters.maxshots/float(size))))
+            sys.stdout.write('%s%.1f %% done, %d / %d' % (extrainfo, float(num_processed) / np.ceil(self.parameters.max_shots/float(size)) *100, num_processed, np.ceil(self.parameters.max_shots/float(size))))
             sys.stdout.flush()
 
 
@@ -183,15 +180,15 @@ class LasingOffReference(object):
         """
         Internal method. Loads dark background reference
         """
-        if not self.parameters.darkreferencepath:
-            cp = CalibrationPaths(env, self.parameters.calpath)
-            darkreferencepath = cp.findCalFileName(Constants.DB_FILE_NAME, int(self.parameters.run))
-            if not darkreferencepath:
-                print ('Dark reference for run %s not found, image will not be background substracted' % self.parameters.run)
+        if not self.parameters.dark_reference_path:
+            cp = CalibrationPaths(env, self.parameters.calibration_path)
+            dark_reference_path = cp.findCalFileName(Constants.DB_FILE_NAME, int(self.parameters.run_number))
+            if not dark_reference_path:
+                print ('Dark reference for run %s not found, image will not be background substracted' % self.parameters.run_number)
                 return None
 
-            self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
-        return DarkBackground.load(self.parameters.darkreferencepath)
+            self.parameters = self.parameters._replace(dark_reference_path = dark_reference_path)
+        return DarkBackground.load(self.parameters.dark_reference_path)
 
 
     @staticmethod
@@ -215,9 +212,9 @@ class LasingOffReference(object):
             if img is None: 
                 continue
 
-            roi_xtcav = xtup.GetXTCAVImageROI(evt)
-            global_calibration = xtup.GetGlobalXTCAVCalibration(evt)
-            saturation_value = xtup.GetCameraSaturationValue(evt)
+            roi_xtcav = xtup.getXTCAVImageROI(evt)
+            global_calibration = xtup.getGlobalXTCAVCalibration(evt)
+            saturation_value = xtup.getCameraSaturationValue(evt)
 
             if not roi_xtcav or not global_calibration or not saturation_value:
                 continue
@@ -241,7 +238,7 @@ class LasingOffReference(object):
         try:
             lor.parameters = LasingOffParameters(**lor.parameters)
             lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
-        except AttributeError:
+        except (AttributeError, TypeError):
             print "Could not load Lasing Off Reference with path "+ path+". Try recreating lasing off " +\
             "reference to ensure compatability between versions"
             return None
@@ -250,19 +247,19 @@ class LasingOffReference(object):
 
 LasingOffParameters = xtu.namedtuple('LasingOffParameters', 
     ['experiment', 
-    'maxshots', 
-    'run', 
+    'max_shots', 
+    'run_number', 
     'start',
-    'validityrange', 
-    'darkreferencepath', 
+    'validity_range', 
+    'dark_reference_path', 
     'num_bunches', 
     'num_groups', 
-    'snrfilter', 
-    'roiwaistthres', 
-    'roiexpand', 
-    'islandsplitmethod',
-    'islandsplitpar1', 
-    'islandsplitpar2', 
-    'calpath', 
+    'snr_filter', 
+    'roi_waist_thres', 
+    'roi_expand', 
+    'island_split_method',
+    'island_split_par1', 
+    'island_split_par2', 
+    'calibration_path', 
     'version'])
 

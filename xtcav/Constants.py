@@ -25,9 +25,11 @@ XTCAV_RFAMP=20
 XTCAV_RFPHASE=90
 ENERGY_DETECTOR=0.2
 DUMP_E_CHARGE=175E-12 #IN C
+FS_TO_S = 1e-15
 
 SNR_BORDER=100 #number of pixels near the border that can be considered to contain just noise
 MIN_ROI_SIZE=3 #minimum number of pixels defining region of interest
+VALID_PIXEL_PERCENTAGE=0.001 #percentage of pixels that must be non-zero in image for analysis
 
 DEFAULT_SPLIT_METHOD='scipyLabel'
 
