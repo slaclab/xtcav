@@ -4,11 +4,12 @@ from xtcav import Constants
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("exprun", help="psana experiment/run string (e.g. exp=xppd7114:run=43)")
+parser.add_argument("experiment", help="psana experiment string (e.g. 'xppd7114')")
+parser.add_argument("run", type=int, help="run number")
 args = parser.parse_args()
 
-ds = DataSource(args.exprun)
-xtcav = Detector(Constants.SRC,ds.env())
+ds = DataSource("exp=%s:run=%s:smd" % (args.experiment, str(args.run)))
+xtcav = Detector(Constants.SRC, ds.env())
 gdet = Detector(Constants.GAS_DETECTOR)
 
 def getLasingOffShot(XTCAVRetrieval,expt):
