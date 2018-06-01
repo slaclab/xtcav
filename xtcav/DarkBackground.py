@@ -95,11 +95,11 @@ class DarkBackground(object):
         self.image=accumulator_xtcav/n
         self.ROI=roi_xtcav
         
-        if not self.parameters.validity_range:
+        if not self.parameters.validity_range or not type(self.parameters.validity_range) == tuple:
             self.parameters = self.parameters._replace(validity_range=(self.parameters.run_number, 'end'))
-        elif type(self.parameters.validity_range) == int:
-            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range, 'end'))
-         
+        elif len(self.parameters.validity_range) == 1:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range[0], 'end'))
+            
         if save_to_file:
             cp = CalibrationPaths(dataSource.env(), self.parameters.calibration_path)
             file = cp.newCalFileName(Cn.DB_FILE_NAME, self.parameters.validity_range[0], self.parameters.validity_range[1])

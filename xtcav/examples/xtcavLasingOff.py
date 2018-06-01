@@ -5,5 +5,5 @@ lasing_off_reference = LasingOffReference(
 	run_number='131',
 	max_shots=200,
 	num_bunches=1,
-	validity_range=131)
+	validity_range=(131,))
 

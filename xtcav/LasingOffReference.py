@@ -56,8 +56,7 @@ class LasingOffReference(object):
             num_bunches=1,                   #Number of bunches
             num_groups=0,        #Number of profiles to average together
             snr_filter=10,           #Number of sigmas for the noise threshold
-            roi_waist_thres=0.2,      #Parameter for the roi location
-            roi_expand=1.5,          #Parameter for the roi location
+            roi_expand=1,          #Parameter for the roi location
             island_split_method = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
             island_split_par1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
             island_split_par2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
@@ -65,11 +64,11 @@ class LasingOffReference(object):
             save_to_file=True):
 
         self.parameters = LasingOffParameters(experiment = experiment,
-            max_shots = max_shots, run_number = run_number, start = start_image, validity_range = validity_range, 
+            max_shots = max_shots, run_number = run_number, start_image = start_image, validity_range = validity_range, 
             dark_reference_path = dark_reference_path, num_bunches = num_bunches, num_groups=num_groups, 
-            snr_filter=snr_filter, roi_waist_thres=roi_waist_thres,
-            roi_expand = roi_expand, island_split_method=island_split_method, island_split_par2 = island_split_par2,
-            island_split_par1=island_split_par1, calibration_path=calibration_path, version=1)
+            snr_filter=snr_filter, roi_expand = roi_expand, island_split_method=island_split_method, 
+            island_split_par2 = island_split_par2, island_split_par1=island_split_par1, 
+            calibration_path=calibration_path, version=1)
 
 
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
@@ -109,8 +108,9 @@ class LasingOffReference(object):
         times = run.times()
         image_numbers = xtup.divideImageTasks(first_event, len(times), rank, size)
 
-        num_processed = 0 #Counter for the total number of xtcav images processed within the run  
+        num_processed = 0 #Counter for the total number of xtcav images processed within the run 
         for t in image_numbers: 
+            t1 = time.time()
             evt = run.event(times[t])
             ebeam = ebeam_data.get(evt)
             gasdetector = gasdetector_data.get(evt)
@@ -157,10 +157,10 @@ class LasingOffReference(object):
         self.n=num_processed    
         
         # Set validity range for reference runs
-        if not self.parameters.validity_range:
+        if not self.parameters.validity_range or not type(self.parameters.validity_range) == tuple:
             self.parameters = self.parameters._replace(validity_range=(self.parameters.run_number, 'end'))
-        elif type(self.parameters.validity_range) == int:
-            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range, 'end'))
+        elif len(self.parameters.validity_range) == 1:
+            self.parameters = self.parameters._replace(validity_range=(self.parameters.validity_range[0], 'end'))
 
         if save_to_file:
             cp = CalibrationPaths(env, self.parameters.calibration_path)
@@ -249,13 +249,12 @@ LasingOffParameters = xtu.namedtuple('LasingOffParameters',
     ['experiment', 
     'max_shots', 
     'run_number', 
-    'start',
+    'start_image',
     'validity_range', 
     'dark_reference_path', 
     'num_bunches', 
     'num_groups', 
     'snr_filter', 
-    'roi_waist_thres', 
     'roi_expand', 
     'island_split_method',
     'island_split_par1', 

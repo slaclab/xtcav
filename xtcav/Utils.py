@@ -9,7 +9,7 @@ import scipy.io
 import math
 import cv2
 import Constants
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import AgglomerativeClustering, DBSCAN
 from sklearn import metrics
 import collections
 import SplittingUtils as su
@@ -115,6 +115,8 @@ def subtractBackground(image, ROI, dark_background):
 def denoiseImage(image, snrfilter):
     """
     Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
+    Note: if you find that all of your images are registering as 'Empty', try decreasing the snrfilter parameter
+    in both your lasing off reference and lasing on analysis.
     Arguments:
       image: 2d numpy array where the first index correspond to y, and the second index corresponds to x
       medianfilter: number of neighbours for the median filter
@@ -169,7 +171,7 @@ def maskImage(img, mean, masks, roi):
     return output
 
 
-def findROI(masks, ROI, threshold, expandfactor=1):
+def findROI(masks, ROI, expandfactor=1):
     """
     Find the subroi of the image
     Arguments:
@@ -257,10 +259,10 @@ def processImage(img, parameters, dark_background, global_calibration,
         mask, mean = denoiseImage(croppedimg, parameters.snr_filter)                    #Remove noise from the image and normalize it
         if mask is None:   #If there is nothing in the image we skip the event  
             return None, None
-
+        
         masks = su.splitImage(mask, parameters.num_bunches, parameters.island_split_method, 
             parameters.island_split_par1, parameters.island_split_par2)#new
-        
+
         if masks is None:  #If there is nothing in the image we skip the event  
             return None, None
 
@@ -269,10 +271,9 @@ def processImage(img, parameters, dark_background, global_calibration,
             warnings.warn_explicit('Incorrect number of bunches detected in image.', UserWarning, 'XTCAV',0)
             return None, None
 
-        masks, roi = findROI(masks, roi, parameters.roi_waist_thres, parameters.roi_expand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
+        masks, roi = findROI(masks, roi, parameters.roi_expand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
         processed_image = maskImage(img_db, mean, masks, roi)
         image_stats = getImageStatistics(processed_image, roi)          #Obtain the different properties and profiles from the trace               
-        
         physical_units = calculatePhyscialUnits(roi,(image_stats[0].xCOM,image_stats[0].yCOM), shot_to_shot, global_calibration)   
         if not physical_units.valid:
             return None, None
@@ -470,12 +471,10 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarch
         
         num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups  
 
-        print "Averaging lasing off profiles into ", num_clusters, " groups."   
-
         if num_profiles == 1:
             groups = np.array([0]) 
         #for debugging. can remove without repercussions
-        elif num_clusters == num_profiles:
+        elif num_clusters >= num_profiles:
             groups = np.array(list(range(num_profiles)))
         else: 
             if method.lower() == 'hierarchical':
@@ -490,10 +489,18 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarch
                 groups = hierarchicalClustering(newX, num_clusters)
             elif method.lower() == 'cosine':
                 groups = hierarchicalClustering(profilesT, num_clusters, distance='cosine')
+            elif method.lower() == 'kmeans':
+                model = DBSCAN()
+                model.fit(profilesT)
+                groups = model.labels_
+            elif method.lower() == 'l1':
+                groups = hierarchicalClustering(profilesT, num_clusters, distance='l1')
             else:
                 print "Clustering method ", method, " not supported. Using hierarchical"
                 groups = hierarchicalClustering(profilesT, num_clusters)
+        
         num_clusters = max(groups) + 1
+        print "Averaging lasing off profiles into ", num_clusters, " groups."   
 
 
     #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
