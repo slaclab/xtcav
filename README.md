@@ -1,6 +1,6 @@
 # XTCAV Analysis
 
-XTCAV is a detector that is used to determine the laser-power vs. time of each LCLS shot.  Some detailed documentation from Tim Maxwell on this device is Here****.  Alvaro Sanchez-Gonzalez authored the original psana-python code to do the rather complex analysis of images from the XTCAV camera to determine these quantities.  This current version has been updated to run more quickly and to fix some analysis errors.  
+XTCAV is a detector that is used to determine the laser-power vs. time of each LCLS shot.  Some detailed documentation from Tim Maxwell on this device is [here](https://confluence.slac.stanford.edu/display/PSDM/New+XTCAV+Documentation?preview=/181536250/181699034/xtcav-users-v0p4.pdf).  Alvaro Sanchez-Gonzalez authored the original psana-python code to do the rather complex analysis of images from the XTCAV camera to determine these quantities.  This current version has been updated to run more quickly and to fix some analysis errors.  
 
 These scripts use some XTCAV data that was made public so they should be runnable by all users.  The scripts can be found in /reg/g/psdm/tutorials/examplePython/xtcav/ in the files xtcavDark.py, xtcavLasingOff.py, xtcavLasingOn.py.
 
@@ -39,7 +39,7 @@ LasingOffReference(
 	max_shots=1400,
 	num_bunches=1,
 	island_split_method = 'scipyLabel',
-	validity_range=(300,302)) #only give first run number to have the validity range be open-ended ("end")
+	validity_range=(300,302)) #only give first run number (i.e. (300,)) to have the validity range be open-ended ("end")
 
 ```
 
@@ -82,66 +82,29 @@ for evt in ds.events():
     
 ```
 
-The LasingOnCharacerization module uses the detector interface **insert link** to find the datasource being used. The program will fail if you try to process events without first setting a datasource.
+* The LasingOnCharacerization module uses the [detector interface](https://confluence.slac.stanford.edu/pages/viewpage.action?pageId=205983617) to find the datasource being used. The program will fail if you try to process events without first setting a datasource.
 
-**Talk about mode**
+* If you are analyzing an older experiment, you may find that psana does not support the 'smd' mode. Instead, use the 'idx' mode.
+
 
 ### Prerequisites
 
-What things you need to install the software and how to install them
+This code relies on the psana and PSCalib pacakages, which are automatically available on your SLAC UNIX account. Follow instructions [here](https://confluence.slac.stanford.edu/display/PSDM/psana+python+Setup) to make sure Beyond that, this package uses standard python packages such scipy, numpy, and cv2.
 
-```
-Give examples
-```
 
 ### Installing
 
-A step by step series of examples that tell you have to get a development env running
-
-Say what the step will be
+If you would like to enhance or change the xtcav code, you can set up the repository locally using the usual 'git clone' method. However, you won't be able to test code on any of the psana data unless you're using one of the psana servers. For development, you should clone the repository into your UNIX account. In order to use the psana python package, you'll first have to run the command
 
 ```
-Give the example
+source /reg/g/psdm/etc/psconda.sh
+```
+`cd` into the `xtcav` directory and run
+```
+python setup.py develop --user
 ```
 
-And repeat
-
-```
-until finished
-```
-
-End with an example of getting some data out of the system or using it for a little demo
-
-## Running the tests
-
-Explain how to run the automated tests for this system
-
-### Break down into end to end tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
-
-### And coding style tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
-
-## Deployment
-
-Add additional notes about how to deploy this on a live system
-
-
-## Versioning
-
-
-
-## Authors
+This will allow the changes you make to persist without having to use a make file or reinstall the package. You can then test your changes and create a pull requests for your changes.
 
 
 
