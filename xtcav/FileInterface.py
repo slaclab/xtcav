@@ -38,11 +38,36 @@ class ConstantsStore(object):
         for k in d.keys():
             self.dispatch(d[k],k)
         self.popdir()
+
+    def list(self,d,name):
+        '''called for every dictionary level to create a new hdf group name.
+        it then looks into the dictionary to see if other groups need to
+        be created'''
+        if self.cwd is '':
+            self.f.create_group(name)
+        self.pushdir(name)
+        for k in d.keys():
+            self.dispatch(d[k],k)
+        self.popdir()
+
+
     def dispatch(self,obj,name):
         '''either persist a supported object, or look into a dictionary
         to see what objects need to be persisted'''
         if type(obj) is dict:
             self.dict(obj,name)
+        # elif type(obj) is list:
+        #     print name 
+        #     ty = type(obj[0][0])
+        #     if ty == list or ty== numpy.ndarray:
+        #         test = type(obj[0][0][0])
+        #         test = float
+
+        #         ty = h5py.special_dtype(vlen=test) 
+        #     dt = h5py.special_dtype(vlen=ty)
+        #     dataset = self.f.create_dataset(name,(len(obj),), dtype=dt)
+        #     for i in range(len(obj)):
+        #         dataset[i] = obj[i]
         else:
             if self.typeok(obj,name):
                 self.storevalue(obj,name)

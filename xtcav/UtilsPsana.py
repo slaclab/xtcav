@@ -25,20 +25,25 @@ def getGlobalXTCAVCalibration(evt):
       globalCalibration: struct with the parameters
       ok: if all the data was retrieved correctly
     """
-    umperpix = psana.Detector('XTCAV_calib_umPerPx')
-    strstrength = psana.Detector('XTCAV_strength_par_S')
-    rfampcalib = psana.Detector('XTCAV_Amp_Des_calib_MV')
-    rfphasecalib = psana.Detector('XTCAV_Phas_Des_calib_deg')
-    dumpe = psana.Detector('XTCAV_Beam_energy_dump_GeV')
-    dumpdisp = psana.Detector('XTCAV_calib_disp_posToEnergy')
+    def getCalibrationValues(possible_detector_names):
+        for i in range(len(possible_detector_names)):
+            try:
+                det = psana.Detector(possible_detector_names[i])
+                val = det(evt)
+                if abs(val) < 1e-100:
+                    continue
+                return val 
+            except KeyError:
+                continue
+        return None
 
     global_calibration = GlobalCalibration(
-        umperpix=umperpix(evt), 
-        strstrength=strstrength(evt), 
-        rfampcalib=rfampcalib(evt), 
-        rfphasecalib=rfphasecalib(evt), 
-        dumpe=dumpe(evt), 
-        dumpdisp=dumpdisp(evt)
+        umperpix=getCalibrationValues(Constants.UM_PER_PIX_names), 
+        strstrength=getCalibrationValues(Constants.STR_STRENGTH_names), 
+        rfampcalib=getCalibrationValues(Constants.RF_AMP_CALIB_names), 
+        rfphasecalib=getCalibrationValues(Constants.RF_PHASE_CALIB_names), 
+        dumpe=getCalibrationValues(Constants.DUMP_E_names), 
+        dumpdisp=getCalibrationValues(Constants.DUMP_DISP_names)
     )
         
     for k,v in global_calibration._asdict().iteritems():
@@ -51,24 +56,27 @@ def getGlobalXTCAVCalibration(evt):
 
 def getXTCAVImageROI(evt):
 
-    roiXN=psana.Detector(Constants.ROI_SIZE_X)
-    roiX=psana.Detector(Constants.ROI_START_X)
-    roiYN=psana.Detector(Constants.ROI_SIZE_Y)
-    roiY=psana.Detector(Constants.ROI_START_Y)
+    for i in range(len(Constants.ROI_SIZE_X_names)):
+        try:
+            roiXN=psana.Detector(Constants.ROI_SIZE_X_names[i])
+            roiX=psana.Detector(Constants.ROI_START_X_names[i])
+            roiYN=psana.Detector(Constants.ROI_SIZE_Y_names[i])
+            roiY=psana.Detector(Constants.ROI_START_Y_names[i])
 
-    xN = roiXN(evt)  #Size of the image in X                           
-    x0 = roiX(evt)    #Position of the first pixel in x
-    yN = roiYN(evt)  #Size of the image in Y 
-    y0 = roiY(evt)    #Position of the first pixel in y
-    
-    if not xN:       
-        warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
-        return None
+            xN = roiXN(evt)  #Size of the image in X                           
+            x0 = roiX(evt)    #Position of the first pixel in x
+            yN = roiYN(evt)  #Size of the image in Y 
+            y0 = roiY(evt)    #Position of the first pixel in y
+            x = x0+np.arange(0, xN) 
+            y = y0+np.arange(0, yN) 
+
+            return ROIMetrics(xN, x0, yN, y0, x, y) 
+
+        except KeyError:
+            continue
         
-    x = x0+np.arange(0, xN) 
-    y = y0+np.arange(0, yN) 
-
-    return ROIMetrics(xN, x0, yN, y0, x, y) 
+    warnings.warn_explicit('No XTCAV ROI info',UserWarning,'XTCAV',0)
+    return None
 
 
 def getShotToShotParameters(ebeam, gasdetector, evt_id):

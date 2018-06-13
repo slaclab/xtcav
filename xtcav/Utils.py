@@ -7,13 +7,10 @@ import warnings
 import cv2
 import scipy.io
 import math
-import cv2
 import Constants
-from sklearn.cluster import AgglomerativeClustering, DBSCAN
-from sklearn import metrics
 import collections
 import SplittingUtils as su
-import scipy.ndimage as im 
+import ClusteringUtils as cu
 import collections
 
 
@@ -142,14 +139,14 @@ def denoiseImage(image, snrfilter):
         warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
         return None, None
      #We make sure it is not just noise by checking that at least .1% of pixels are not empty
-    if float(np.count_nonzero(mask))/np.size(mask) < Constants.VALID_PIXEL_PERCENTAGE: 
-        warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' % Constants.VALID_PIXEL_PERCENTAGE*10,UserWarning,'XTCAV',0)
+    if float(np.count_nonzero(mask))/np.size(mask) < Constants.VALID_PIXEL_FRACTION: 
+        warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' % Constants.VALID_PIXEL_FRACTION*10,UserWarning,'XTCAV',0)
         return None, None
 
     return mask, mean
 
 
-def maskImage(img, mean, masks, roi):
+def adjustImage(img, mean, masks, roi):
     """
     Crop to roi; zero out noise and negative values; normalize image so that all values sum to 1
     Arguments:
@@ -162,7 +159,7 @@ def maskImage(img, mean, masks, roi):
     """
     
     croppedimg = img[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
-    croppedimg -= mean
+    #croppedimg -= mean
     output = np.zeros(masks.shape)
     for i in range(masks.shape[0]):
         output[i] = croppedimg
@@ -272,7 +269,7 @@ def processImage(img, parameters, dark_background, global_calibration,
             return None, None
 
         masks, roi = findROI(masks, roi, parameters.roi_expand)                  #Crop the image, the ROI struct is changed. It also add an extra dimension to the image so the array can store multiple images corresponding to different bunches
-        processed_image = maskImage(img_db, mean, masks, roi)
+        processed_image = adjustImage(img_db, mean, masks, roi)                 # adjust image based on mean and newly found roi
         image_stats = getImageStatistics(processed_image, roi)          #Obtain the different properties and profiles from the trace               
         physical_units = calculatePhyscialUnits(roi,(image_stats[0].xCOM,image_stats[0].yCOM), shot_to_shot, global_calibration)   
         if not physical_units.valid:
@@ -360,7 +357,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         eRMSslice=interp(t)        
         
         #Find best no lasing match
-        num_groups=nolasing_averaged_profiles.eCurrent[j].shape[0]
+        num_groups = nolasing_averaged_profiles.eCurrent[j].shape[0]
         corr = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1]**2, 1, nolasing_averaged_profiles.eCurrent[j])
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
@@ -399,10 +396,9 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
-    escalefactor=np.sum(powerERMS)*dt*Constants.FS_TO_S                 #in J
-    
-    
+    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM[powerECOM > 0])*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
+    escalefactor=np.sum(powerERMS[powerERMS > 0])*dt*Constants.FS_TO_S                 #in J
+
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(num_bunches):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
@@ -417,7 +413,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarchical'):
+def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierarchical'):
     """
     Cluster together profiles of xtcav images
     Arguments:
@@ -469,35 +465,18 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarch
             distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
             profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
         
-        num_clusters = findOptGroups(profilesT, B, 10) if not num_groups else num_groups  
+        num_clusters = cu.findOptGroups(profilesT, 40, method=method.lower()) if not num_groups else num_groups 
+
+        # temporary since h5py current;y isnt supporting variable length arrays
+        num_groups = num_clusters 
 
         if num_profiles == 1:
             groups = np.array([0]) 
         #for debugging. can remove without repercussions
-        elif num_clusters >= num_profiles:
-            groups = np.array(list(range(num_profiles)))
+        # elif num_clusters >= num_profiles:
+        #     groups = np.array(range(num_profiles))
         else: 
-            if method.lower() == 'hierarchical':
-                groups = hierarchicalClustering(profilesT, num_clusters)
-            elif method.lower() == 'old':
-                groups = oldGroupingMethod(profilesT, num_clusters)
-            elif method.lower() == 'svd':
-                num_features=10
-                u, s, v = np.linalg.svd(profilesT.T)
-                W = u[:, 0:num_features - 1]
-                newX = np.matmul(profilesT, W)
-                groups = hierarchicalClustering(newX, num_clusters)
-            elif method.lower() == 'cosine':
-                groups = hierarchicalClustering(profilesT, num_clusters, distance='cosine')
-            elif method.lower() == 'kmeans':
-                model = DBSCAN()
-                model.fit(profilesT)
-                groups = model.labels_
-            elif method.lower() == 'l1':
-                groups = hierarchicalClustering(profilesT, num_clusters, distance='l1')
-            else:
-                print "Clustering method ", method, " not supported. Using hierarchical"
-                groups = hierarchicalClustering(profilesT, num_clusters)
+            groups = cu.getGroups(profilesT, num_clusters, method=method.lower())
         
         num_clusters = max(groups) + 1
         print "Averaging lasing off profiles into ", num_clusters, " groups."   
@@ -561,121 +540,6 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups, method='hierarch
         averageERMS, num_bunches, eventTime, eventFid)
 
 
-def oldGroupingMethod(profilesT, num_groups):
-    num_profiles = profilesT.shape[0]
-    shots_per_group = int(np.ceil(float(num_profiles)/num_groups))
-    
-    group = np.zeros(num_profiles, dtype=np.int32)       #array that will indicate which group each profile sill correspond to
-    group[:]=-1                             #initiated to -1
-    for g in range(num_groups):                     #For each group
-        currRef=np.where(group==-1)[0]  
-        if currRef.size == 0:
-            continue
-        currRef=currRef[0]                  #We pick the first member to be the first one that has not been assigned to a group yet
-
-        group[currRef]=g                   #We assign it the current group
-
-        # We calculate the correlation of the first profile to the rest of available profiles
-        err = np.zeros(num_profiles, dtype=np.float64);              
-        for i in range(currRef, num_profiles): 
-            if group[i] == -1:
-                err[i] = np.corrcoef(profilesT[currRef,:],profilesT[i,:])[0,1]**2;
-
-        #The 'shots_per_group-1' profiles with the highest correlation will be also assigned to the same group
-        order=np.argsort(err)            
-        for i in range(0, min(shots_per_group-1, len(order))): 
-            group[order[-(1+i)]]=g
-    return group
-
-
-def hierarchicalClustering(profilesT, num_clusters, distance='euclidean'):
-    linkage = 'ward' if distance == 'euclidean' else 'average'
-    model = AgglomerativeClustering(n_clusters=num_clusters, linkage=linkage, affinity=distance)
-    model.fit(profilesT)
-    return model.labels_
-
-
-def findOptGroups(X, B, max_num):
-    """
-    Helper function to find optimal # of groups for profiles 
-    Arguments:
-      X: profiles to group
-      B: number of reference groups to generate
-      max_num: maximum number of groups allowed
-    Output
-      opt: the optimal number of groups for this data
-    """
-    num_profiles, t = X.shape
-    rand_cluster_variance = {}
-    true_cluster_variance = {}
-    sd = {}
-    #svd of profiles matrix
-    column_mean = np.mean(X, axis=0)
-    centered = X - column_mean
-    u,d,vt = np.linalg.svd(centered)
-    x_ = np.matmul(centered, vt.T)
-    bounding_box = getBoundingBox(x_)
-    min_clusters = 2
-    max_clusters = max_num
-    gap_statistic = {}
-    sd = {}
-    reference_sets = []
-    for i in range(B):
-        rand_sample = generateRandSample(bounding_box, num_profiles)
-        rand_sample = np.matmul(rand_sample, vt) + column_mean
-        reference_sets.append(rand_sample)
-        
-    gap_statistic[min_clusters], sd[min_clusters] = calcGapStatistic(min_clusters, X, reference_sets)
-    gap_statistic[max_clusters], sd[max_clusters] = calcGapStatistic(max_clusters, X, reference_sets)
-    while True:
-        mid1 = (max_clusters - min_clusters)/2 + min_clusters
-        if mid1 == max_clusters or mid1 == min_clusters:
-            break
-        if not gap_statistic.get(mid1):
-            gap_statistic[mid1], sd[mid1] = calcGapStatistic(mid1, X, reference_sets)
-        if not gap_statistic.get(mid1-1):
-            gap_statistic[mid1-1], sd[mid1-1] = calcGapStatistic(mid1-1, X, reference_sets)
-        if gap_statistic[mid1] - sd[mid1] < gap_statistic[mid1-1]:
-            max_clusters = mid1
-        else:
-            min_clusters = mid1
-    opt = max_clusters if gap_statistic[max_clusters] - sd[max_clusters] > gap_statistic[max_clusters -1] else min_clusters
-    return opt
-
-
-def calcGapStatistic(n, X, reference_sets):
-    B = len(reference_sets)
-    model = AgglomerativeClustering(n_clusters=n, linkage="ward", affinity="euclidean")
-    model.fit(X)
-    true_cluster_variance = np.log(calcClusterVariance(model.labels_, X, n))
-    rand_variance = []
-    num_profiles = X.shape[0]
-    #generate B random reference datasets
-    for k in range(B):        
-        model.fit(reference_sets[k])
-        rand_variance.append(np.log(calcClusterVariance(model.labels_, reference_sets[k], n)))
-    rand_cluster_variance = np.mean(rand_variance)
-    sd = np.std(rand_variance)* np.sqrt(1+1./B)
-    gap_statistic = rand_cluster_variance - true_cluster_variance
-    return gap_statistic, sd
-
-
-def calcClusterVariance(assignments, data, num_clusters):
-    d = 0
-    for group in range(num_clusters):
-        points = data[assignments == group,:]
-        center = np.mean(points, axis = 0)
-        d += sum(np.apply_along_axis(lambda x: np.linalg.norm(x - center)**2, 1, points))
-    return d
-
-
-def generateRandSample(bounding_box, num_profiles):
-    return np.apply_along_axis(lambda l : np.random.uniform(l[0], l[1], num_profiles), 1, bounding_box).T
-
-
-def getBoundingBox(X):
-    return [(min(X[:,i]), max(X[:,i])) for i in range(X.shape[1])]
-
 # http://stackoverflow.com/questions/26248654/numpy-return-0-with-divide-by-zero
 def divideNoWarn(numer,denom,default):
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -721,16 +585,16 @@ ShotToShotParameters = namedtuple('ShotToShotParameters',
 
 ImageStatistics = namedtuple('ImageStatistics', 
     ['imfrac',
-    'xProfile',
-    'yProfile',
-    'xCOM',
-    'yCOM',
-    'xRMS',
-    'yRMS',
-    'xFWHM',
-    'yFWHM',
-    'yCOMslice',
-    'yRMSslice'],
+    'xProfile',  #Profile projected onto the x axis
+    'yProfile',   #Profile projected onto the y axis
+    'xCOM', #X position of the center of mass
+    'yCOM', #Y position of the center of mass
+    'xRMS', #Standard deviation of the values in y
+    'yRMS', #Standard deviation of the values in y
+    'xFWHM',    #FWHM of the X profile
+    'yFWHM',    #FWHM of the Y profile
+    'yCOMslice',    #Y position of the center of mass for each slice in x
+    'yRMSslice'],   #Width of the distribution of the points for each slice around the y center of masses
     {'xRMS': 0,
      'yRMS': 0,
      'xFWHM': 0,
@@ -739,10 +603,10 @@ ImageStatistics = namedtuple('ImageStatistics',
 
 
 PhysicalUnits = namedtuple('PhysicalUnits', 
-    ['xfs',
-    'yMeV',
-    'xfsPerPix',
-    'yMeVPerPix',
+    ['xfs', #x axis in fs around the center of mass
+    'yMeV', #Spacing of the y axis in MeV
+    'xfsPerPix', #Spacing of the x axis in fs (this can be negative)
+    'yMeVPerPix', #Spacing of the y axis in MeV
     'valid'])
 
 
