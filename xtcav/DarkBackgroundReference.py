@@ -26,7 +26,7 @@ from Utils import namedtuple, ROIMetrics
         first run number used to generate the reference and the last run.
 """
 
-class DarkBackground(object):
+class DarkBackgroundReference(object):
     def __init__(self, 
         experiment='amoc8114', 
         max_shots=401, 

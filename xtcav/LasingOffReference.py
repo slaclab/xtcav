@@ -14,7 +14,7 @@ import UtilsPsana as xtup
 import SplittingUtils as su
 import Constants
 from CalibrationPaths import *
-from DarkBackground import *
+from DarkBackgroundReference import *
 from FileInterface import Load as constLoad
 from FileInterface import Save as constSave
 
@@ -188,7 +188,7 @@ class LasingOffReference(object):
                 return None
 
             self.parameters = self.parameters._replace(dark_reference_path = dark_reference_path)
-        return DarkBackground.load(self.parameters.dark_reference_path)
+        return DarkBackgroundReference.load(self.parameters.dark_reference_path)
 
 
     @staticmethod

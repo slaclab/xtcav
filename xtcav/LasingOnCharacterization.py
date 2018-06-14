@@ -16,7 +16,7 @@ import Utils as xtu
 import UtilsPsana as xtup
 import SplittingUtils as su
 import Constants
-from DarkBackground import *
+from DarkBackgroundReference import *
 from LasingOffReference import *
 from CalibrationPaths import *
 
@@ -126,7 +126,7 @@ class LasingOnCharacterization(object):
                 return    
             print "Using file " + self.dark_reference_path.split("/")[-1] + " for dark reference"
         
-        self._darkreference = DarkBackground.load(self.dark_reference_path)
+        self._darkreference = DarkBackgroundReference.load(self.dark_reference_path)
 
                 
     def _loadLasingOffReference(self):

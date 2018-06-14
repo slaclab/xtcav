@@ -17,9 +17,9 @@ Sample of dark run analysis:
 
 import psana
 psana.setOption('psana.calib-dir','calib')
-from xtcav.DarkBackground import *
+from xtcav.DarkBackgroundReference import *
 
-DarkBackground(experiment='xpptut15', 
+DarkBackgroundReference(experiment='xpptut15', 
 	run_number='300', 
 	max_shots=1000,
 	validity_range=(300,302))

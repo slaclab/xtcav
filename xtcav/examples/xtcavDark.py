@@ -1,9 +1,9 @@
-from xtcav.DarkBackground import *
+from xtcav.DarkBackgroundReference import *
 import numpy as np
 
-dark_background = DarkBackground(
-	experiment='amox23616', 
-	run_number='104', 
+dark_background = DarkBackgroundReference(
+	experiment='cxin7316', 
+	run_number='85', 
 	max_shots=500)
 
 # Debugging
