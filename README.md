@@ -104,8 +104,21 @@ source /reg/g/psdm/etc/psconda.sh
 python setup.py develop --user
 ```
 
-This will allow the changes you make to persist without having to use a make file or reinstall the package. You can then test your changes and create a pull requests for your changes.
+This will allow the changes you make to persist without having to use a make file or reinstall the package. You can then test your changes and subsequently create a pull requests.
 
+### Bugs & desired upgrades
 
+The xtcav code is currently a work in progress. Some features missing include:
 
+* Better electron bunch splitting capabilities
+    * The current implementation should theoretically work for any number of bunches in the image. That being said, if bunches heavily intersect, then the code will only find one bunch. Recommendations for solving this include using the current 'connected components' finding method followed by a 'sparsest cut' method that would separate a single region into the two (or more) regions that minimizes the ratio (number of edges cut/min(size of regions)).
+
+* Ability to have different numbers of 'clusters' for different electron bunches within same lasing off reference
+    * Most of the groundwork for this has already been laid out. The current issue is saving the lasing off reference when the arrays are of variable length. This is an h5py problem. To fix this, the `FileInterface` file should be changed. Once this has been done, the line `num_groups = num_clusters` in `averageXTCAVProfileGroups` in `Utils.py` simply needs to be removed in order for this functionality to persist. 
+
+* Lasing off profile clustering methods
+    * Current clustering algorithms tested include Hierarchical (with cosine, l1, and euclidean distance metrics), KMeans, DBSCAN, and Birch. Analysis showed that Hierarchical with Euclidean affinity provided the best results. See child page of XTCAV confluence for specific results. The next step would be to compare these algorithms with the performance of a SVD composition method: <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4052871/>
+
+* xtcavDisplay script
+    * The scripts in `bin`, specifically `xtcavDisp`, are currently not very customizeable. Some desired features include providing flags to change the types of graphs shown, the size of graphs, etc. This would make it more useful for realtime anayses. 
 
