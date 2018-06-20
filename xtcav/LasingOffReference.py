@@ -34,13 +34,12 @@ size = comm.Get_size()
         start_image (int): image in run to start from
         validity_range (tuple): If not set, the validity range for the reference will go from the 
         first run number used to generate the reference and the last run.
-        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
+        calibration_path (str): Custom calibration directory in case the default is not intended to be used.
         num_bunches (int): Number of bunches.
-        medianfilter (int): Number of neighbours for median filter.
         snr_filter (float): Number of sigmas for the noise threshold.
         num_groups (int): Number of profiles to average together for each reference.
-        roi_waist_thres (float): ratio with respect to the maximum to decide on the waist of the XTCAV trace.
         roi_expand (float): number of waists that the region of interest around will span around the center of the trace.
+        roi_fraction (float): fraction of pixels that must be non-zero in roi(s) of image for analysis
         island_split_method (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is 'scipylabel'.
 """
 
@@ -54,19 +53,23 @@ class LasingOffReference(object):
             validity_range=None,
             dark_reference_path=None, #Dark reference information
             num_bunches=1,                   #Number of bunches
-            num_groups=0,        #Number of profiles to average together
+            num_groups=None,        #Number of profiles to average together
             snr_filter=10,           #Number of sigmas for the noise threshold
             roi_expand=1,          #Parameter for the roi location
+            roi_fraction=Constants.ROI_PIXEL_FRACTION,
             island_split_method = Constants.DEFAULT_SPLIT_METHOD,      #Method for island splitting
             island_split_par1 = 3.0,  #Ratio between number of pixels between largest and second largest groups when calling scipy.label
             island_split_par2 = 5.,   #Ratio between number of pixels between second/third largest groups when calling scipy.label
             calibration_path='',
             save_to_file=True):
+    
+        if type(run_number) == int:
+            run_number = str(run_number)
 
         self.parameters = LasingOffParameters(experiment = experiment,
             max_shots = max_shots, run_number = run_number, start_image = start_image, validity_range = validity_range, 
             dark_reference_path = dark_reference_path, num_bunches = num_bunches, num_groups=num_groups, 
-            snr_filter=snr_filter, roi_expand = roi_expand, island_split_method=island_split_method, 
+            snr_filter=snr_filter, roi_expand = roi_expand, roi_fraction=roi_fraction, island_split_method=island_split_method, 
             island_split_par2 = island_split_par2, island_split_par1=island_split_par1, 
             calibration_path=calibration_path, version=1)
 
@@ -153,8 +156,9 @@ class LasingOffReference(object):
         #At the end, all the reference profiles are converted to Physical units, grouped and averaged together
         averaged_profiles = xtu.averageXTCAVProfilesGroups(image_profiles, self.parameters.num_groups);     
 
-        self.averaged_profiles=averaged_profiles
-        self.n=num_processed    
+        self.averaged_profiles, num_groups=averaged_profiles
+        self.n=num_processed
+        self.parameters = self.parameters._replace(num_groups=num_groups)   
         
         # Set validity range for reference runs
         if not self.parameters.validity_range or not type(self.parameters.validity_range) == tuple:
@@ -255,10 +259,16 @@ LasingOffParameters = xtu.namedtuple('LasingOffParameters',
     'num_bunches', 
     'num_groups', 
     'snr_filter', 
-    'roi_expand', 
+    'roi_expand',
+    'roi_fraction', 
     'island_split_method',
     'island_split_par1', 
     'island_split_par2', 
     'calibration_path', 
-    'version'])
+    'version'], 
+    {'num_bunches':1,                           
+    'snr_filter':10,           
+    'roi_expand':1,          
+    'roi_fraction':Constants.ROI_PIXEL_FRACTION,
+    'island_split_method': Constants.DEFAULT_SPLIT_METHOD})
 

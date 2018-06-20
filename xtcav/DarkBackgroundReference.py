@@ -36,7 +36,7 @@ class DarkBackgroundReference(object):
         calibration_path='',
         save_to_file=True):
 
-        self.image=[]
+        self.image=None
         self.ROI=None
         self.n=0
 

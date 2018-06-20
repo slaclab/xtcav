@@ -26,19 +26,21 @@ class LasingOnCharacterization(object):
     """
     Class that can be used to reconstruct the full X-Ray power time profile for single or multiple bunches, relying on the presence of a dark background reference, and a lasing off reference. (See GenerateDarkBackground and Generate LasingOffReference for more information)
     Attributes:
-        calibrationpath (str): Custom calibration directory in case the default is not intended to be used.
+        calibration_path (str): Custom calibration directory in case the default is not intended to be used.
+        start_image (int): image in run to start from
         snr_filter (float): Number of sigmas for the noise threshold (If not set, the value that was used for the lasing off reference will be used).
         roi_expand (float): number of waists that the region of interest around will span around the center of the trace (If not set, the value that was used for the lasing off reference will be used).
+        roi_fraction (float): fraction of pixels that must be non-zero in roi(s) of image for analysis
         island_split_method (str): island splitting algorithm. Set to 'scipylabel' or 'contourLabel'  The defaults parameter is then one used for the lasing off reference or 'scipylabel'.
     """
 
     def __init__(self, 
-        experiment='',
-        run_numbers='',
-        num_bunches = None,
+        #all parameters defaulted to None since code handles filling parameters later
+        num_bunches = None, 
         start_image = 0,
-        snr_filter = None,
-        roi_expand = None,
+        snr_filter=None,
+        roi_expand=None,
+        roi_fraction=None,
         island_split_method=None,
         island_split_par1=None,
         island_split_par2=None,
@@ -51,12 +53,11 @@ class LasingOnCharacterization(object):
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
         
-        self.experiment = experiment                #Experiment label
-        self.run_numbers = run_numbers                            #Run numbers
         self.num_bunches = num_bunches              #Number of bunches
         self.start_image = start_image
         self.snr_filter = snr_filter                  #Number of sigmas for the noise threshold
         self.roi_expand = roi_expand                  #Parameter for the roi location
+        self.roi_fraction = roi_fraction               
         self.island_split_method = island_split_method  #Method for island splitting
         self.island_split_par1 = island_split_par1
         self.island_split_par2 = island_split_par2
@@ -67,8 +68,8 @@ class LasingOnCharacterization(object):
         
         self._envset = False
         self._calibrationsset = False
-        if experiment and run_numbers:
-            self._setDataSource()
+
+        self._setDataSource
 
         self._loadDarkReference()
         self._loadLasingOffReference()
@@ -78,7 +79,12 @@ class LasingOnCharacterization(object):
         """
         Method that uses detector interface to gather data source info. This method is called automatically and should not be called by the user unless he has a knowledge of the operation done by this class internally.    
         """
-        self._env = psana.det_interface._getEnv()
+        try:
+            self._env = psana.det_interface._getEnv()
+        except RuntimeError:
+            #warnings.warn_explicit('Data source not set yet. Initialize data source before starting analysis',UserWarning,'XTCAV',0)
+            return
+
         self._xtcav_camera = psana.Detector(Constants.SRC)
         self._ebeam_data = psana.Detector(Constants.EBEAM)
         self._gasdetector_data = psana.Detector(Constants.GAS_DETECTOR)
@@ -104,8 +110,9 @@ class LasingOnCharacterization(object):
         if self._roixtcav and self._global_calibration and self._saturation_value:
             self._calibrationsset = True
 
-        self.parameters = LasingOnParameters(self.num_bunches, self.snr_filter,  
-            self.roi_expand, self.island_split_method, self.island_split_par1, self.island_split_par2 )
+        #Only reason to do this is to allow us to use same 'processImage' function across lasing on/off shots
+        self.parameters = LasingOnParameters(self.num_bunches, self.snr_filter,  self.roi_expand,
+            self.roi_fraction, self.island_split_method, self.island_split_par1, self.island_split_par2 )
 
 
     def _loadDarkReference(self):
@@ -162,7 +169,9 @@ class LasingOnCharacterization(object):
         if not self.snr_filter:
             self.snr_filter=10
         if not self.roi_expand:
-            self.roi_expand=2.5    
+            self.roi_expand=2.5 
+        if not self.roi_fraction:
+            self.roi_fraction=Constants.ROI_PIXEL_FRACTION    
         if not self.island_split_method:
             self.island_split_method=Constants.DEFAULT_SPLIT_METHOD       
         if not self.island_split_par1:        
@@ -182,6 +191,8 @@ class LasingOnCharacterization(object):
             self.snr_filter=self._lasingoffreference.parameters.snr_filter
         if not self.roi_expand:
             self.roi_expand=self._lasingoffreference.parameters.roi_expand
+        if not self.roi_fraction:
+            self.roi_fraction=self._lasingoffreference.parameters.roi_fraction
         if not self.dark_reference_path:
             self.dark_reference_path=self._lasingoffreference.parameters.dark_reference_path
         if not self.island_split_method:
@@ -209,8 +220,11 @@ class LasingOnCharacterization(object):
 
         if not self._envset:
             self._setDataSource()
-            #warnings.warn_explicit('Environment not set. Must set datasource or experiment and run number',UserWarning,'XTCAV',0)
-            #return 
+
+        if not self._envset:
+            warnings.warn_explicit('Data source not set yet. Initialize data source before starting analysis',UserWarning,'XTCAV',0)
+            return False
+
 
         if not self._calibrationsset:
             self._setCalibrations(evt)
@@ -666,7 +680,8 @@ class LasingOnCharacterization(object):
 LasingOnParameters = xtu.namedtuple('LasingOnParameters', 
     ['num_bunches', 
     'snr_filter', 
-    'roi_expand', 
+    'roi_expand',
+    'roi_fraction', 
     'island_split_method',
     'island_split_par1', 
     'island_split_par2'])   

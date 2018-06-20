@@ -72,7 +72,7 @@ class ConstantsStore(object):
             if self.typeok(obj,name):
                 self.storevalue(obj,name)
             else:
-                logging.warning('XTCAV Constants.py: variable "'+name+'" of type "'+type(obj).__name__+'" not supported')
+                logging.warning('XTCAV FileInterface.py: variable "'+name+'" of type "'+type(obj).__name__+'" not supported')
 
 class ConstantsLoad(object):
     def __init__(self,file):

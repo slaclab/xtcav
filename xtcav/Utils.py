@@ -109,7 +109,7 @@ def subtractBackground(image, ROI, dark_background):
     return image
 
     
-def denoiseImage(image, snrfilter):
+def denoiseImage(image, snrfilter, roi_fraction):
     """
     Get rid of some of the noise in the image (profiles, center of mass, etc) of an image
     Note: if you find that all of your images are registering as 'Empty', try decreasing the snrfilter parameter
@@ -139,7 +139,7 @@ def denoiseImage(image, snrfilter):
         warnings.warn_explicit('Image Completely Empty After Denoising',UserWarning,'XTCAV',0)
         return None, None
      #We make sure it is not just noise by checking that at least .1% of pixels are not empty
-    if float(np.count_nonzero(mask))/np.size(mask) < Constants.VALID_PIXEL_FRACTION: 
+    if float(np.count_nonzero(mask))/np.size(mask) < roi_fraction: 
         warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' % Constants.VALID_PIXEL_FRACTION*10,UserWarning,'XTCAV',0)
         return None, None
 
@@ -159,7 +159,8 @@ def adjustImage(img, mean, masks, roi):
     """
     
     croppedimg = img[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
-    #croppedimg -= mean
+    # Not sure we need to do this but it was in the old code sooooo
+    croppedimg -= mean
     output = np.zeros(masks.shape)
     for i in range(masks.shape[0]):
         output[i] = croppedimg
@@ -253,10 +254,10 @@ def processImage(img, parameters, dark_background, global_calibration,
         img_db = subtractBackground(img, roi, dark_background) 
         croppedimg =  img_db[roi.y0:roi.y0+roi.yN-1,roi.x0:roi.x0+roi.xN-1]
 
-        mask, mean = denoiseImage(croppedimg, parameters.snr_filter)                    #Remove noise from the image and normalize it
+        mask, mean = denoiseImage(croppedimg, parameters.snr_filter, parameters.roi_fraction)           #Remove noise from the image and normalize it
         if mask is None:   #If there is nothing in the image we skip the event  
             return None, None
-        
+
         masks = su.splitImage(mask, parameters.num_bunches, parameters.island_split_method, 
             parameters.island_split_par1, parameters.island_split_par2)#new
 
@@ -413,7 +414,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierarchical'):
+def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierarchical', profilesT=None):
     """
     Cluster together profiles of xtcav images
     Arguments:
@@ -460,12 +461,13 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
     for j in range(num_bunches):
         #Decide which profiles are going to be in which groups and average them together
         #Calculate interpolated profiles of electron current in time for comparison
-        profilesT = np.zeros((num_profiles,len(t)), dtype=np.float64)  
-        for i in range(num_profiles): 
-            distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
-            profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
-        
-        num_clusters = cu.findOptGroups(profilesT, 40, method=method.lower()) if not num_groups else num_groups 
+        if profilesT is None:
+            profilesT = np.zeros((num_profiles,len(t)), dtype=np.float64)  
+            for i in range(num_profiles): 
+                distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
+                profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
+            
+        num_clusters = cu.findOptGroups(profilesT, 100, method=method.lower()) if not num_groups else num_groups 
 
         # temporary since h5py current;y isnt supporting variable length arrays
         num_groups = num_clusters 
@@ -473,12 +475,12 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
         if num_profiles == 1:
             groups = np.array([0]) 
         #for debugging. can remove without repercussions
-        # elif num_clusters >= num_profiles:
-        #     groups = np.array(range(num_profiles))
+        elif num_clusters >= num_profiles:
+            groups = np.array(range(num_profiles))
         else: 
             groups = cu.getGroups(profilesT, num_clusters, method=method.lower())
         
-        num_clusters = max(groups) + 1
+        num_clusters = int(max(groups) + 1)
         print "Averaging lasing off profiles into ", num_clusters, " groups."   
 
 
@@ -537,7 +539,7 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
 
     return AveragedProfiles(t, averageECurrent, averageECOMslice, 
         averageERMSslice, averageDistT, averageDistE, averageTRMS, 
-        averageERMS, num_bunches, eventTime, eventFid)
+        averageERMS, num_bunches, eventTime, eventFid), num_clusters
 
 
 # http://stackoverflow.com/questions/26248654/numpy-return-0-with-divide-by-zero

@@ -36,7 +36,7 @@ FS_TO_S = 1e-15
 
 SNR_BORDER=100 #number of pixels near the border that can be considered to contain just noise
 MIN_ROI_SIZE=3 #minimum number of pixels defining region of interest
-VALID_PIXEL_FRACTION=0.001 #fraction of pixels that must be non-zero in image for analysis
+ROI_PIXEL_FRACTION=0.001 #fraction of pixels that must be non-zero in roi(s) of image for analysis
 
 DEFAULT_SPLIT_METHOD='scipyLabel'
 

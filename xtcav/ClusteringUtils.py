@@ -159,6 +159,32 @@ def calculateClusterVariance(assignments, data, num_clusters):
         d += sum(np.apply_along_axis(lambda x: np.linalg.norm(x - center)**2, 1, points))
     return d
 
+def getPercentile(data, percentile=0.9):
+    a = np.cumsum(data, axis=0)
+    out = np.divide(a, np.sum(data, axis=0), out=np.zeros_like(a), where=np.sum(data, axis=0)!=0)
+    test = (out > 1-percentile).argmax(axis=0)
+    return test
+    
+def trimImg(x):
+    rows = np.any(x, axis=1)
+    cols = np.any(x, axis=0)
+    ymin, ymax = np.where(rows)[0][[0, -1]]
+    xmin, xmax = np.where(cols)[0][[0, -1]]
+    return x[ymin:ymax+1, xmin:xmax+1]
+
+
+def getNorthCoast(imgs):
+    trimmed = np.array([trimImg(f) for f in imgs])
+    out = np.array([getPercentile(x) for x in trimmed])
+    arrlens = np.array([len(x) for x in out])
+    max_len = np.amax(arrlens)
+    maxes = [np.max(x) for x in out]
+    max_val = np.amax(maxes)
+    def padArray(x):
+        return np.pad(x, pad_width=((max_len - len(x))/2, int(np.ceil(float(max_len - len(x))/2)) ) , mode="constant", constant_values=max_val+1) 
+    pad = [padArray(x) for x in out]
+    return np.vstack(pad)
+
 
 def generateRandSample(bounding_box, num_profiles):
     """

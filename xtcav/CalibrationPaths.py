@@ -1,5 +1,5 @@
 from psana import *
-from PSCalib.CalibFileFinder import CalibFile
+from PSCalib.CalibFileFinder import CalibFile, CalibFileFinder
 import os
 import Constants
 
@@ -11,11 +11,16 @@ class CalibrationPaths:
         self.cdir = calibdir if calibdir else self.env.calibDir()
         
 
-    def findCalFileName(self,type,rnum):
+    def findCalFileName(self,type,rnum,method='default'):
         """
         Returns calibration file name, given run number and type
-        """              
-        return self.findCalibFile(self.src, type, rnum)
+        """ 
+        if method == 'latest':
+            return self.findCalibFile(self.src, type, rnum)
+        cff = CalibFileFinder(self.cdir, self.calibgroup, pbits=0)
+        fname = cff.findCalibFile(self.src, type, rnum)
+        return fname             
+        
 
 
     def newCalFileName(self, type, runBegin, runEnd='end'):
