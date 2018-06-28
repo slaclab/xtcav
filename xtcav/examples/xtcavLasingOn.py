@@ -2,10 +2,11 @@ import psana
 from xtcav.LasingOnCharacterization import *
 import numpy as np
 
-runs = '137'
+run = '137'
 experiment='amox23616'
 maxshots = 50
 
+XTCAVRetrieval=LasingOnCharacterization() 
 data_source = psana.DataSource("exp=%s:run=%s:smd" % (experiment, run))
 n_r=0  #Counter for the total number of xtcav images processed within the run 
 for evt in data_source.events():
