@@ -140,7 +140,7 @@ def denoiseImage(image, snrfilter, roi_fraction):
         return None, None
      #We make sure it is not just noise by checking that at least .1% of pixels are not empty
     if float(np.count_nonzero(mask))/np.size(mask) < roi_fraction: 
-        warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' % Constants.VALID_PIXEL_FRACTION*10,UserWarning,'XTCAV',0)
+        warnings.warn_explicit('< %.4f %% of pixels are non-zero after denoising. Image will not be used' %roi_fraction*10,UserWarning,'XTCAV',0)
         return None, None
 
     return mask, mean
@@ -359,7 +359,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         #Find best no lasing match
         num_groups = nolasing_averaged_profiles.eCurrent[j].shape[0]
-        corr = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1]**2, 1, nolasing_averaged_profiles.eCurrent[j])
+        corr = np.apply_along_axis(lambda x: np.corrcoef(eCurrent, x)[0,1], 1, nolasing_averaged_profiles.eCurrent[j])
         
         #The index of the most similar is that with a highest correlation, i.e. the last in the array after sorting it
         groupnum[j]=np.argmax(corr)
@@ -392,18 +392,20 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         #First calculation of the power based on center of masses and dispersion for each bunch
         powerECOM[j,:]=((nolasingECOM[j]-lasingECOM[j])*Constants.E_CHARGE*1e6)*eCurrent    #In J/s
-        powerERMS[j,:]=(lasingERMS[j]**2-nolasingERMS[j]**2)*(eCurrent**(2.0/3.0)) #
-        
+        powerERMS[j,:]=(lasingERMS[j]**2-nolasingERMS[j]**2)*(eCurrent**(2.0/3.0)) 
+
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM[powerECOM > 0])*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
-    escalefactor=np.sum(powerERMS[powerERMS > 0])*dt*Constants.FS_TO_S                 #in J
+    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
+    escalefactor=np.sum(powerERMS)*dt*Constants.FS_TO_S                 #in J
 
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(num_bunches):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
-        powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW)        
+        powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW) 
+        powerECOM[j,:][powerECOM[j,:] < 0] = 0
+        powerERMS[j,:][powerERMS[j,:] < 0] = 0       
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
         eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*Constants.FS_TO_S*1e9
         eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*Constants.FS_TO_S*1e9
@@ -461,6 +463,8 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
     for j in range(num_bunches):
         #Decide which profiles are going to be in which groups and average them together
         #Calculate interpolated profiles of electron current in time for comparison
+
+        #Using this if statement for experimental purposes. 
         if profilesT is None:
             profilesT = np.zeros((num_profiles,len(t)), dtype=np.float64)  
             for i in range(num_profiles): 
@@ -589,8 +593,8 @@ ImageStatistics = namedtuple('ImageStatistics',
     ['imfrac',
     'xProfile',  #Profile projected onto the x axis
     'yProfile',   #Profile projected onto the y axis
-    'xCOM', #X position of the center of mass
-    'yCOM', #Y position of the center of mass
+    'xCOM', #X position of the center of mass, not scaled by energy axis
+    'yCOM', #Y position of the center of mass, not scaled by energy axis
     'xRMS', #Standard deviation of the values in y
     'yRMS', #Standard deviation of the values in y
     'xFWHM',    #FWHM of the X profile
