@@ -397,13 +397,14 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM)*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
-    escalefactor=np.sum(powerERMS)*dt*Constants.FS_TO_S                 #in J
+    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM[powerECOM > 0])*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
+    escalefactor=np.sum(powerERMS[powerERMS > 0])*dt*Constants.FS_TO_S                 #in J
 
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(num_bunches):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
         powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW) 
+        #Set all negative power to 0
         powerECOM[j,:][powerECOM[j,:] < 0] = 0
         powerERMS[j,:][powerERMS[j,:] < 0] = 0       
         powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
@@ -416,7 +417,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         nolasingECurrent, lasingECOM, nolasingECOM, lasingERMS, nolasingERMS, num_bunches, 
         groupnum)
     
-def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierarchical', profilesT=None):
+def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierarchical'):
     """
     Cluster together profiles of xtcav images
     Arguments:
@@ -465,11 +466,10 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
         #Calculate interpolated profiles of electron current in time for comparison
 
         #Using this if statement for experimental purposes. 
-        if profilesT is None:
-            profilesT = np.zeros((num_profiles,len(t)), dtype=np.float64)  
-            for i in range(num_profiles): 
-                distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
-                profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
+        profilesT = np.zeros((num_profiles,len(t)), dtype=np.float64)  
+        for i in range(num_profiles): 
+            distT=(list_image_stats[i][j].xCOM-list_image_stats[i][0].xCOM)*list_physical_units[i].xfsPerPix
+            profilesT[i,:]=scipy.interpolate.interp1d(list_physical_units[i].xfs-distT,list_image_stats[i][j].xProfile, kind='linear',fill_value=0,bounds_error=False,assume_sorted=True)(t)
             
         num_clusters = cu.findOptGroups(profilesT, 100, method=method.lower()) if not num_groups else num_groups 
 
