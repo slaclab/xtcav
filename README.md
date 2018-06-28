@@ -94,7 +94,7 @@ This code relies on the psana and PSCalib pacakages, which are automatically ava
 
 ### Installing
 
-If you would like to enhance or change the xtcav code, you can set up the repository locally using the usual 'git clone' method. However, you won't be able to test code on any of the psana data unless you're using one of the psana servers. For development, you should clone the repository into your UNIX account. In order to use the psana python package, you'll first have to run the command
+If you would like to enhance or change the xtcav code, you can set up the repository locally using the usual 'git clone' method. However, you won't be able to test code on any of the psana data unless you're using one of the psana servers. For development, you should clone the repository into your UNIX account. Once you've ssh-ed into the psana server, in order to use the psana python package, you'll first have to run the command
 
 ```
 source /reg/g/psdm/etc/psconda.sh
@@ -125,4 +125,7 @@ The xtcav code is currently a work in progress. Some features missing include:
 
 * Add default values for xtcav global calibration values
     * The calibration values for the xtcav are currently populated from the psana datasource. It would be good to have some default values for variables such as umperpix, strstrength, etc. in case that information is missing or for running siumulations/experiments. Default values can be added to the `GlobalCalibration` namedtuple in Utils.py
-     
+
+* Variability in optimal number of clusters chosen
+    * Because the reference sets used to calculate the gap statistic are generated randomly, there may be some variability in the number of clusters chosen. Therefore your results may be slightly different from run to run. If you’d like to avoid this, you can manually set the number of clusters chosen
+
