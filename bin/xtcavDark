@@ -8,7 +8,7 @@ parser.add_argument('--max_shots', nargs='?', const=400, type=int, default=400)
 #parser.add_argument('--validity_range', nargs='?', const=None, type=tuple, default=None)
 args = parser.parse_args()
 
-from xtcav.DarkBackgroundReference import *
+from xtcav2.DarkBackgroundReference import *
 
 dark_background = DarkBackgroundReference(
     experiment=args.experiment, 

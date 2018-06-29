@@ -13,7 +13,7 @@ parser.add_argument('--roi_expand', nargs='?', const=1.0, type=float, default=1.
 args = parser.parse_args()
 
 import psana
-from xtcav.LasingOnCharacterization import *
+from xtcav2.LasingOnCharacterization import *
 import numpy as np
 
 data_source = psana.DataSource("exp=%s:run=%s:%s" % (args.experiment, str(args.run), args.mode))
