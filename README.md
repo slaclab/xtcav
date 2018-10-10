@@ -44,10 +44,28 @@ The xtcav code is currently a work in progress. Some features missing include:
 
 * xtcavDisplay script
     * The scripts in `bin`, specifically `xtcavDisp`, are currently not very customizeable. Some desired features include providing flags to change the types of graphs shown, the size of graphs, etc. This would make it more useful for realtime anayses. 
+    
+* A common GUI that could be used in the hutches and in ACR. Ideally it could be run online and offline. This is challenging due to the way XTCAV data travel over the BLD to the hutches.
+    * remote desktop to ACR
+    * send image at 1 Hz via EPICS —> psana
+    * ~1 min delayed SMD (requires DAQ)
+    * ratner: rip out algorithm to TREX, call python underneath
 
 * Add default values for xtcav global calibration values
     * The calibration values for the xtcav are currently populated from the psana datasource. It would be good to have some default values for variables such as umperpix, strstrength, etc. in case that information is missing or for running siumulations/experiments. Default values can be added to the `GlobalCalibration` namedtuple in Utils.py
 
 * Variability in optimal number of clusters chosen
     * Because the reference sets used to calculate the gap statistic are generated randomly, there may be some variability in the number of clusters chosen. Therefore your results may be slightly different from run to run. If you’d like to avoid this, you can manually set the number of clusters chosen
+    
+And a few small things
+* Pixel percentage: make it a parameter
+* Handle no ROI Info
+
+### Data Used to Develop/Debug the Code
+
+* amox23616 — SASE 
+    * 104 dark, 131 las off, 132-139 data
+    * 12 dark, 60 las off, 62-63 data
+* cxin7316 — clemens [not used]
+* diamcc14 — 441 dark, 442 las off, 443 data
 
