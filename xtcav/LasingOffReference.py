@@ -1,4 +1,10 @@
+from __future__ import print_function
+from __future__ import absolute_import
 
+from builtins import next
+from builtins import str
+from builtins import range
+from builtins import object
 import os
 import time
 import psana
@@ -9,14 +15,14 @@ import IPython
 import sys
 import getopt
 import warnings
-import Utils as xtu
-import UtilsPsana as xtup
-import SplittingUtils as su
-import Constants
-from CalibrationPaths import *
-from DarkBackgroundReference import *
-from FileInterface import Load as constLoad
-from FileInterface import Save as constSave
+from . import Utils as xtu
+from . import UtilsPsana as xtup
+from . import SplittingUtils as su
+from . import Constants
+from .CalibrationPaths import *
+from .DarkBackgroundReference import *
+from .FileInterface import Load as constLoad
+from .FileInterface import Save as constSave
 
 # PP imports
 from mpi4py import MPI
@@ -78,15 +84,15 @@ class LasingOffReference(object):
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
         
         if rank == 0:
-            print 'Lasing off reference'
-            print '\t Experiment: %s' % self.parameters.experiment
-            print '\t Runs: %s' % self.parameters.run_number
-            print '\t Number of bunches: %d' % self.parameters.num_bunches
-            print '\t Valid shots to process: %d' % self.parameters.max_shots
-            print '\t Dark reference run: %s' % self.parameters.dark_reference_path
+            print('Lasing off reference')
+            print('\t Experiment: %s' % self.parameters.experiment)
+            print('\t Runs: %s' % self.parameters.run_number)
+            print('\t Number of bunches: %d' % self.parameters.num_bunches)
+            print('\t Valid shots to process: %d' % self.parameters.max_shots)
+            print('\t Dark reference run: %s' % self.parameters.dark_reference_path)
         
         #Loading the data, this way of working should be compatible with both xtc and hdf5 files
-        dataSource = psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number))
+        dataSource = psana.DataSource(("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number)).encode("ascii"))
 
         #Camera for the xtcav images
         xtcav_camera = psana.Detector(Constants.SRC)
@@ -100,7 +106,7 @@ class LasingOffReference(object):
         #Empty list for the statistics obtained from each image, the shot to shot properties, and the ROI of each image (although this ROI is initially the same for each shot, it becomes different when the image is cropped around the trace)
         list_image_profiles= []
             
-        run = dataSource.runs().next()
+        run = next(dataSource.runs())
         env = dataSource.env()
 
         dark_background = self._getDarkBackground(env)
@@ -232,8 +238,8 @@ class LasingOffReference(object):
 
         ###Move this to file interface folder...
         instance = copy.deepcopy(self)
-        instance.parameters = dict(vars(self.parameters))
-        instance.averaged_profiles = dict(vars(self.averaged_profiles))
+        instance.parameters = dict(self.parameters._asdict())
+        instance.averaged_profiles = dict(self.averaged_profiles._asdict())
         constSave(instance,path)
 
     @staticmethod
@@ -243,8 +249,8 @@ class LasingOffReference(object):
             lor.parameters = LasingOffParameters(**lor.parameters)
             lor.averaged_profiles = xtu.AveragedProfiles(**lor.averaged_profiles)
         except (AttributeError, TypeError):
-            print "Could not load Lasing Off Reference with path "+ path+". Try recreating lasing off " +\
-            "reference to ensure compatability between versions"
+            print("Could not load Lasing Off Reference with path "+ path+". Try recreating lasing off " +\
+            "reference to ensure compatability between versions")
             return None
         return lor
 

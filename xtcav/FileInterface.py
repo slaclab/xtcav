@@ -1,3 +1,5 @@
+from __future__ import print_function
+from builtins import object
 import h5py
 import numpy
 import logging
@@ -15,7 +17,6 @@ class ConstantsStore(object):
         self.f.close()
     def pushdir(self,dir):
         '''move down a level and keep track of what hdf directory level we are in'''    
-        
         self.cwd += '/'+dir
        
     def popdir(self):
@@ -35,7 +36,7 @@ class ConstantsStore(object):
         if self.cwd is '':
             self.f.create_group(name)
         self.pushdir(name)
-        for k in d.keys():
+        for k in list(d.keys()):
             self.dispatch(d[k],k)
         self.popdir()
 
@@ -46,7 +47,7 @@ class ConstantsStore(object):
         if self.cwd is '':
             self.f.create_group(name)
         self.pushdir(name)
-        for k in d.keys():
+        for k in list(d.keys()):
             self.dispatch(d[k],k)
         self.popdir()
 
@@ -68,10 +69,16 @@ class ConstantsStore(object):
         #     dataset = self.f.create_dataset(name,(len(obj),), dtype=dt)
         #     for i in range(len(obj)):
         #         dataset[i] = obj[i]
+        elif type(obj) is tuple:
+           encoded_obj = tuple(entry.encode('utf-8') if isinstance(entry, type(u"")) else entry for entry in obj)
+           self.storevalue(encoded_obj,name)
+        elif isinstance(obj, type(u"")):
+           self.storevalue(obj.encode("utf-8"),name)
         else:
             if self.typeok(obj,name):
                 self.storevalue(obj,name)
             else:
+                import pprint; pprint.pprint(obj); pprint.pprint(name); pprint.pprint(type(name)); pprint.pprint(type(object))
                 logging.warning('XTCAV FileInterface.py: variable "'+name+'" of type "'+type(obj).__name__+'" not supported')
 
 class ConstantsLoad(object):
@@ -105,9 +112,9 @@ class ConstantsLoad(object):
                 self.setval(remainder,getattr(obj,dictname))
         else:
             if type(obj) is dict:
-                obj[name]=self.f[self.fullname].value
+                obj[name]=self.f[self.fullname][...]
             else:
-                setattr(obj,name,self.f[self.fullname].value)
+                setattr(obj,name,self.f[self.fullname][...])
     def loadCallBack(self,name,obj):
         '''called back by h5py routine visititems for each
         item (group/dataset) in the h5 file'''
@@ -143,4 +150,4 @@ if __name__ == "__main__":
     ct = ConstTest()
     Save(ct,'ConstTest.h5')
     data = Load('ConstTest.h5')
-    print '***',dir(data),data.parameters
+    print('***',dir(data),data.parameters)

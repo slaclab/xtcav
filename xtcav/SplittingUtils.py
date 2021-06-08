@@ -1,5 +1,7 @@
+from __future__ import absolute_import
+from builtins import range
 import numpy as np
-from Utils import *
+from .Utils import *
 
 def splitImage(image, n, islandsplitmethod, par1, par2):
     """

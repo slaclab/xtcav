@@ -1,3 +1,7 @@
+from __future__ import division
+from __future__ import absolute_import
+from builtins import range
+from past.utils import old_div
 import numpy as np
 import scipy.interpolate
 import time
@@ -5,7 +9,7 @@ import warnings
 import cv2
 import scipy.io
 import math
-import Constants
+from . import Constants
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn import metrics
 
@@ -181,7 +185,7 @@ def getNorthCoast(imgs):
     maxes = [np.max(x) for x in out]
     max_val = np.amax(maxes)
     def padArray(x):
-        return np.pad(x, pad_width=((max_len - len(x))/2, int(np.ceil(float(max_len - len(x))/2)) ) , mode="constant", constant_values=max_val+1) 
+        return np.pad(x, pad_width=(old_div((max_len - len(x)),2), int(np.ceil(float(max_len - len(x))/2)) ) , mode="constant", constant_values=max_val+1) 
     pad = [padArray(x) for x in out]
     return np.vstack(pad)
 

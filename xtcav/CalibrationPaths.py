@@ -1,9 +1,12 @@
+from __future__ import absolute_import
+from builtins import str
+from builtins import object
 from psana import *
 from PSCalib.CalibFileFinder import CalibFile, CalibFileFinder
 import os
-import Constants
+from . import Constants
 
-class CalibrationPaths:
+class CalibrationPaths(object):
     def __init__(self,env,calibdir=''):
         self.env = env
         self.calibgroup = Constants.CALIB_GROUP

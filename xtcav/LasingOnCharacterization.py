@@ -1,6 +1,12 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 
 #Script for the retrieval of the pulses shot to shot
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import os
 import time
 import psana
@@ -12,13 +18,13 @@ import sys
 import getopt
 import math
 import warnings
-import Utils as xtu
-import UtilsPsana as xtup
-import SplittingUtils as su
-import Constants
-from DarkBackgroundReference import *
-from LasingOffReference import *
-from CalibrationPaths import *
+from . import Utils as xtu
+from . import UtilsPsana as xtup
+from . import SplittingUtils as su
+from . import Constants
+from .DarkBackgroundReference import *
+from .LasingOffReference import *
+from .CalibrationPaths import *
 
 
 class LasingOnCharacterization(object):
@@ -131,7 +137,7 @@ class LasingOnCharacterization(object):
             if not self.dark_reference_path:
                 warnings.warn_explicit('Dark reference for run %d not found, image will not be background substracted' % self._currentevent.run(),UserWarning,'XTCAV',0)
                 return    
-            print "Using file " + self.dark_reference_path.split("/")[-1] + " for dark reference"
+            print("Using file " + self.dark_reference_path.split("/")[-1] + " for dark reference")
         
         self._darkreference = DarkBackgroundReference.load(self.dark_reference_path)
 
@@ -156,7 +162,7 @@ class LasingOnCharacterization(object):
             warnings.warn_explicit('Lasing off reference for run %d not found, using set or default values for image processing' % self._currentevent.run(),UserWarning,'XTCAV',0)
             self._loadDefaultProcessingParameters()
         else:
-            print "Using file " + self.lasingoff_reference_path.split("/")[-1] + " for lasing off reference"
+            print("Using file " + self.lasingoff_reference_path.split("/")[-1] + " for lasing off reference")
             self._loadLasingOffReferenceParameters()
 
             
@@ -342,9 +348,9 @@ class LasingOnCharacterization(object):
             central=np.argmax(power)
             try:
                 fit=np.polyfit(t[central-2:central+3],power[central-2:central+3],2)
-                peakpos[j]=-fit[1]/(2*fit[0])
+                peakpos[j]=old_div(-fit[1],(2*fit[0]))
             except:
-                print "here"
+                print("here")
                 return None 
             
         return peakpos
@@ -379,7 +385,7 @@ class LasingOnCharacterization(object):
                 warnings.warn_explicit('Method %s not supported' % (method),UserWarning,'XTCAV',0)
                 return None   
             #quadratic fit around 5 pixels method
-            threshold=np.max(power)/2
+            threshold=old_div(np.max(power),2)
             abovethrestimes=t[power>=threshold]
             dt=t[1]-t[0]
             peakwidth[j]=abovethrestimes[-1]-abovethrestimes[0]+dt
@@ -416,7 +422,7 @@ class LasingOnCharacterization(object):
             central=np.argmax(self._image_profile.image_stats[j].xProfile)
             try:
                 fit=np.polyfit(t[central-2:central+3], self._pulse_characterization.image_stats[j].xProfile[central-2:central+3],2)
-                peakpos[j]=-fit[1]/(2*fit[0])
+                peakpos[j]=old_div(-fit[1],(2*fit[0]))
             except:
                 return None 
             
@@ -455,8 +461,8 @@ class LasingOnCharacterization(object):
                 central = np.argmax(profile)
                 try:
                     fit = np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
-                    peakpos[j,k] =- fit[1]/(2*fit[0])
-                    filter = 1-np.exp(-(t-peakpos[j,k])**2/(filterwith/(2*np.sqrt(np.log(2))))**2)
+                    peakpos[j,k] =old_div(- fit[1],(2*fit[0]))
+                    filter = 1-np.exp(old_div(-(t-peakpos[j,k])**2,(old_div(filterwith,(2*np.sqrt(np.log(2)))))**2))
                     profile = profile*filter                   
                 except:
                     peakpos[j,k] = np.nan
@@ -488,7 +494,7 @@ class LasingOnCharacterization(object):
             return None
         df = 1./(dt*N)
         
-        f = np.array(range(0, N/2+1) + range(-N/2+1,0))*df
+        f = np.array(list(range(0, old_div(N,2)+1)) + list(range(old_div(-N,2)+1,0)))*df
                            
         ffilter=(1-np.exp(-(f*targetwidthfs)**6))
           
@@ -511,7 +517,7 @@ class LasingOnCharacterization(object):
             central=np.argmax(profilef)
             try:
                 fit=np.polyfit(t[central-2:central+3],profile[central-2:central+3],2)
-                peakpos[j]=-fit[1]/(2*fit[0])
+                peakpos[j]=old_div(-fit[1],(2*fit[0]))
             except:
                 return None 
             
@@ -521,9 +527,9 @@ class LasingOnCharacterization(object):
         x1,x2,x3 = p + np.array([-1,0,1])
         y1,y2,y3 = self.wf[(p-self.rangelim[0]-1):(p-self.rangelim[0]+2)]
         d = (x1-x2)*(x1-x3)*(x2-x3)
-        A = ( x3 * (y2-y1) + x2 * (y1-y3) + x1 * (y3-y2) ) / d
-        B = ( x3**2.0 * (y1-y2) + x2**2.0 * (y3-y1) + x1**2.0 * (y2-y3) ) / d
-        return -1*B / (2*A)
+        A = old_div(( x3 * (y2-y1) + x2 * (y1-y3) + x1 * (y3-y2) ), d)
+        B = old_div(( x3**2.0 * (y1-y2) + x2**2.0 * (y3-y1) + x1**2.0 * (y2-y3) ), d)
+        return old_div(-1*B, (2*A))
 
 
     def electronCurrentPerBunch(self):    

@@ -1,3 +1,10 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import next
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import copy
 import os
 import time
@@ -7,12 +14,12 @@ import glob
 import sys
 import getopt
 import warnings
-import UtilsPsana as xtup
-from FileInterface import Load as constLoad
-from FileInterface import Save as constSave
-from CalibrationPaths import *
-import Constants as Cn
-from Utils import namedtuple, ROIMetrics  
+from . import UtilsPsana as xtup
+from .FileInterface import Load as constLoad
+from .FileInterface import Save as constSave
+from .CalibrationPaths import *
+from . import Constants as Cn
+from .Utils import namedtuple, ROIMetrics  
 """
     Class that generates a dark background image for XTCAV reconstruction purposes. Essentially takes valid
     dark reference images and averages them to find the "average" camera background. It is recommended to use a 
@@ -52,13 +59,13 @@ class DarkBackgroundReference(object):
         After setting all the parameters, this method has to be called to generate the dark reference and 
         save it in the proper location. 
         """
-        print 'dark background reference'
-        print '\t Experiment: %s' % self.parameters.experiment
-        print '\t Run: %s' % self.parameters.run_number
-        print '\t Valid shots to process: %d' % self.parameters.max_shots
+        print('dark background reference')
+        print('\t Experiment: %s' % self.parameters.experiment)
+        print('\t Run: %s' % self.parameters.run_number)
+        print('\t Valid shots to process: %d' % self.parameters.max_shots)
         
         #Loading the dataset from the "dark" run, this way of working should be compatible with both xtc and hdf5 files
-        dataSource=psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number))
+        dataSource=psana.DataSource(("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run_number)).encode("ascii"))
         
         #Camera and type for the xtcav images
         xtcav_camera = psana.Detector(Cn.SRC)
@@ -68,7 +75,7 @@ class DarkBackgroundReference(object):
         epicsStore=dataSource.env().epicsStore()
 
         n=0  #Counter for the total number of xtcav images processed 
-        run = dataSource.runs().next()     
+        run = next(dataSource.runs())     
         
         roi_xtcav, first_image = self._getCalibrationValues(run, xtcav_camera, start_image)
         accumulator_xtcav = np.zeros((roi_xtcav.yN, roi_xtcav.xN), dtype=np.float64)
@@ -92,7 +99,7 @@ class DarkBackgroundReference(object):
                 break                          
         #At the end of the program the total accumulator is saved 
         sys.stdout.write('\nMaximum number of images processed\n') 
-        self.image=accumulator_xtcav/n
+        self.image=old_div(accumulator_xtcav,n)
         self.ROI=roi_xtcav
         
         if not self.parameters.validity_range or not type(self.parameters.validity_range) == tuple:
@@ -131,8 +138,8 @@ class DarkBackgroundReference(object):
     def save(self,path): 
         instance = copy.deepcopy(self)
         if instance.ROI:
-            instance.ROI = dict(vars(instance.ROI))
-            instance.parameters = dict(vars(instance.parameters))
+            instance.ROI = dict(instance.ROI._asdict())
+            instance.parameters = dict(instance.parameters._asdict())
         constSave(instance,path)
         
     @staticmethod    
@@ -142,8 +149,8 @@ class DarkBackgroundReference(object):
             obj.ROI = ROIMetrics(**obj.ROI)
             obj.parameters = DarkBackgroundParameters(**obj.parameters)
         except (AttributeError, TypeError):
-            print "Could not load Dark Reference with path "+ path+". Try recreating dark reference " +\
-            "to ensure compatability between versions"
+            print("Could not load Dark Reference with path "+ path+". Try recreating dark reference " +\
+            "to ensure compatability between versions")
             return None
         return obj
 

@@ -1,4 +1,11 @@
+from __future__ import division
+from __future__ import print_function
 
+from builtins import next
+from builtins import str
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import os
 import time
 import psana
@@ -67,14 +74,14 @@ class LasingOffSamples(object):
         warnings.filterwarnings('always',module='Utils',category=UserWarning)
         warnings.filterwarnings('ignore',module='Utils',category=RuntimeWarning, message="invalid value encountered in divide")
 
-        print 'Lasing off reference'
-        print '\t Experiment: %s' % self.parameters.experiment
-        print '\t Runs: %s' % self.parameters.run
-        print '\t Number of bunches: %d' % self.parameters.num_bunches
-        print '\t Dark reference run: %s' % self.parameters.darkreferencepath
+        print('Lasing off reference')
+        print('\t Experiment: %s' % self.parameters.experiment)
+        print('\t Runs: %s' % self.parameters.run)
+        print('\t Number of bunches: %d' % self.parameters.num_bunches)
+        print('\t Dark reference run: %s' % self.parameters.darkreferencepath)
         
         #Loading the data, this way of working should be compatible with both xtc and hdf5 files
-        self.dataSource = psana.DataSource("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run))
+        self.dataSource = psana.DataSource(("exp=%s:run=%s:idx" % (self.parameters.experiment, self.parameters.run)).encode("ascii"))
 
         #Camera for the xtcav images
         self.xtcav_camera = psana.Detector(xtcav.Constants.SRC)
@@ -88,7 +95,7 @@ class LasingOffSamples(object):
         #Stores for environment variables   
         self.epicsStore = self.dataSource.env().epicsStore()
        
-        run = self.dataSource.runs().next()
+        run = next(self.dataSource.runs())
         env = self.dataSource.env()
 
         self.ROI_XTCAV, self.global_calibration, self.saturation_value, first_image = self._getCalibrationValues(run, self.xtcav_camera)
@@ -145,7 +152,7 @@ class LasingOffSamples(object):
                 sys.stdout.write('\n')
                 break
             if num_processed % 1000 == 0:
-                sio.savemat(file_name+'_'+str(self.parameters.run)+'_'+str((num_processed-1)/1000)+'.mat', {'data':image_profiles})
+                sio.savemat(file_name+'_'+str(self.parameters.run)+'_'+str(old_div((num_processed-1),1000))+'.mat', {'data':image_profiles})
                 image_profiles = []
 
         #  here gather all shots in one core, add all lists
@@ -162,7 +169,7 @@ class LasingOffSamples(object):
                 return None
 
             self.parameters = self.parameters._replace(darkreferencepath = darkreferencepath)
-        print "Using reference path" + self.parameters.darkreferencepath
+        print("Using reference path" + self.parameters.darkreferencepath)
         return DarkBackground.load(self.parameters.darkreferencepath)
 
     def Save(self,path):

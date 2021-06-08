@@ -1,9 +1,13 @@
+from __future__ import division
+from __future__ import absolute_import
+from builtins import range
+from past.utils import old_div
 import numpy as np
 import psana
 import warnings
 import time
-from Utils import ROIMetrics, GlobalCalibration, ShotToShotParameters
-import Constants
+from .Utils import ROIMetrics, GlobalCalibration, ShotToShotParameters
+from . import Constants
 
 def getCameraSaturationValue(evt):
     try:
@@ -46,7 +50,7 @@ def getGlobalXTCAVCalibration(evt):
         dumpdisp=getCalibrationValues(Constants.DUMP_DISP_names)
     )
         
-    for k,v in global_calibration._asdict().iteritems():
+    for k,v in list(global_calibration._asdict().items()):
         if not v:
             warnings.warn_explicit('No XTCAV Calibration for epics variable ' + k, UserWarning,'XTCAV',0)
             return None
@@ -95,7 +99,7 @@ def getShotToShotParameters(ebeam, gasdetector, evt_id):
         dumpecharge=ebeam.ebeamDumpCharge()*Constants.E_CHARGE #In C 
         
         if gasdetector:
-            energydetector=(gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC())/2 
+            energydetector=old_div((gasdetector.f_11_ENRC()+gasdetector.f_12_ENRC()),2) 
             return ShotToShotParameters(ebeamcharge = ebeamcharge, 
                 xtcavrfphase = xtcavrfphase, xtcavrfamp = xtcavrfamp, 
                 dumpecharge = dumpecharge, xrayenergy = 1e-3*energydetector, 
@@ -120,8 +124,8 @@ def divideImageTasks(first_image, last_image, rank, size):
     if num_shots <= 0:
         return np.empty()
     tiling = np.arange(rank*4, rank*4+4,1) #  returns [0, 1, 2, 3] if e.g. rank == 0 and size == 4:
-    comb1 = np.tile(tiling, np.ceil(num_shots/(4.*size)).astype(int))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]        
-    comb2 = np.repeat(np.arange(0, np.ceil(num_shots/(4.*size)), 1), 4) # returns [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, ...]
+    comb1 = np.tile(tiling, np.ceil(old_div(num_shots,(4.*size))).astype(int))  # returns [0, 1, 2, 3, 0, 1, 2, 3, ...]        
+    comb2 = np.repeat(np.arange(0, np.ceil(old_div(num_shots,(4.*size))), 1), 4) # returns [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, ...]
             #  list of shot numbers assigned to this core
     main = comb2*4*size + comb1  + first_image # returns [  0.   1.   2.   3.  16.  17.  18.  19.  32.  33. ... ]
     main = np.delete(main, np.where(main>=last_image) )  # remove element if greater or equal to maximum number of shots in run

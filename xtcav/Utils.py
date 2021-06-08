@@ -1,5 +1,10 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
 #(c) Coded by Alvaro Sanchez-Gonzalez 2014
 #Functions related with the XTCAV pulse retrieval
+from builtins import range
+from past.utils import old_div
 import numpy as np
 import scipy.interpolate
 import time
@@ -7,10 +12,10 @@ import warnings
 import cv2
 import scipy.io
 import math
-import Constants
+from . import Constants
 import collections
-import SplittingUtils as su
-import ClusteringUtils as cu
+from . import SplittingUtils as su
+from . import ClusteringUtils as cu
 import collections
 
 
@@ -34,14 +39,14 @@ def getImageStatistics(image, ROI):
         xProfile = np.sum(cur_image, axis=0)  #Profile projected onto the x axis
         yProfile = np.sum(cur_image, axis=1)  #Profile projected onto the y axis
         
-        xCOM = np.dot(xProfile,np.transpose(ROI.x))/imFrac        #X position of the center of mass
-        xRMS = np.sqrt(np.dot((ROI.x-xCOM)**2,xProfile)/imFrac) #Standard deviation of the values in x
-        ind = np.where(xProfile >= np.amax(xProfile)/2)[0]   
+        xCOM = old_div(np.dot(xProfile,np.transpose(ROI.x)),imFrac)        #X position of the center of mass
+        xRMS = np.sqrt(old_div(np.dot((ROI.x-xCOM)**2,xProfile),imFrac)) #Standard deviation of the values in x
+        ind = np.where(xProfile >= old_div(np.amax(xProfile),2))[0]   
         xFWHM = np.abs(ind[-1]-ind[0]+1)                     #FWHM of the X profile
 
-        yCOM = np.dot(yProfile,ROI.y)/imFrac                      #Y position of the center of mass
-        yRMS = np.sqrt(np.dot((ROI.y-yCOM)**2,yProfile)/imFrac) #Standard deviation of the values in y
-        ind = np.where(yProfile >= np.amax(yProfile)/2)
+        yCOM = old_div(np.dot(yProfile,ROI.y),imFrac)                      #Y position of the center of mass
+        yRMS = np.sqrt(old_div(np.dot((ROI.y-yCOM)**2,yProfile),imFrac)) #Standard deviation of the values in y
+        ind = np.where(yProfile >= old_div(np.amax(yProfile),2))
         yFWHM = np.abs(ind[-1]-ind[0])                        #FWHM of the Y profile
         
         yCOMslice = divideNoWarn(np.dot(np.transpose(cur_image),ROI.y), xProfile, yCOM)   #Y position of the center of mass for each slice in x
@@ -73,9 +78,9 @@ def getCenterOfMass(image,x,y):
       x0,y0 coordinates of the center of mass 
     """
     profilex = np.sum(image, axis=0)     
-    x0 = np.dot(profilex, np.transpose(x))/np.sum(profilex)
+    x0 = old_div(np.dot(profilex, np.transpose(x)),np.sum(profilex))
     profiley = np.sum(image, axis=1);     
-    y0 = np.dot(profiley, y)/np.sum(profiley)
+    y0 = old_div(np.dot(profiley, y),np.sum(profiley))
     
     return x0,y0
     
@@ -165,7 +170,7 @@ def adjustImage(img, mean, masks, roi):
     for i in range(masks.shape[0]):
         output[i] = croppedimg
         output[i][np.logical_or(masks[i] == 0, croppedimg < 0)] = 0
-    output = output/np.sum(output)
+    output = old_div(output,np.sum(output))
     return output
 
 
@@ -190,14 +195,14 @@ def findROI(masks, ROI, expandfactor=1):
     xmin, xmax = np.where(cols)[0][[0, -1]]
 
     widthy = (ymax - ymin +1)*expandfactor
-    centery = (ymax + ymin +1)/2
+    centery = old_div((ymax + ymin +1),2)
     widthx = (xmax - xmin +1)*expandfactor
-    centerx = (xmax + xmin +1)/2
+    centerx = old_div((xmax + xmin +1),2)
 
-    ind1Y = max(0, np.round(centery - widthy/2).astype(np.int))
-    ind2Y = min(np.round(centery + widthy/2).astype(np.int), rows.size)
-    ind1X = max(0, np.round(centerx - widthx/2).astype(np.int))
-    ind2X = min(np.round(centerx + widthx/2).astype(np.int), cols.size)
+    ind1Y = max(0, np.round(centery - old_div(widthy,2)).astype(np.int))
+    ind2Y = min(np.round(centery + old_div(widthy,2)).astype(np.int), rows.size)
+    ind1X = max(0, np.round(centerx - old_div(widthx,2)).astype(np.int))
+    ind2X = min(np.round(centerx + old_div(widthx,2)).astype(np.int), cols.size)
                 
     #Output ROI in terms of the input ROI            
     outROI = ROIMetrics(ind2X-ind1X+1, 
@@ -212,11 +217,11 @@ def findROI(masks, ROI, expandfactor=1):
 
 def calculatePhyscialUnits(ROI, center, shot_to_shot, global_calibration):
     valid=1
-    yMeVPerPix = global_calibration.umperpix*global_calibration.dumpe/global_calibration.dumpdisp*1e-3          #Spacing of the y axis in MeV
+    yMeVPerPix = old_div(global_calibration.umperpix*global_calibration.dumpe,global_calibration.dumpdisp)*1e-3          #Spacing of the y axis in MeV
     
-    xfsPerPix = -global_calibration.umperpix*global_calibration.rfampcalib/(0.3*global_calibration.strstrength*shot_to_shot.xtcavrfamp)     #Spacing of the x axis in fs (this can be negative)
+    xfsPerPix = old_div(-global_calibration.umperpix*global_calibration.rfampcalib,(0.3*global_calibration.strstrength*shot_to_shot.xtcavrfamp))     #Spacing of the x axis in fs (this can be negative)
     
-    cosphasediff=math.cos((global_calibration.rfphasecalib-shot_to_shot.xtcavrfphase)*math.pi/180)
+    cosphasediff=math.cos(old_div((global_calibration.rfphasecalib-shot_to_shot.xtcavrfphase)*math.pi,180))
 
     #If the cosine of phase was too close to 0, we return warning and error
     if np.abs(cosphasediff) < 0.5:
@@ -306,10 +311,10 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         warnings.warn_explicit('Different number of bunches in the reference',UserWarning,'XTCAV',0)
     
     t = nolasing_averaged_profiles.t   #Master time obtained from the no lasing references
-    dt = (t[-1]-t[0])/(t.size-1)
+    dt = old_div((t[-1]-t[0]),(t.size-1))
     
              #Electron charge in coulombs
-    Nelectrons = shot_to_shot.dumpecharge/Constants.E_CHARGE   #Total number of electrons in the bunch    
+    Nelectrons = old_div(shot_to_shot.dumpecharge,Constants.E_CHARGE)   #Total number of electrons in the bunch    
     
     #Create the the arrays for the outputs, first index is always bunch number
     bunchdelay=np.zeros(num_bunches, dtype=np.float64);                       #Delay from each bunch with respect to the first one in fs
@@ -343,7 +348,7 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
         
         dt_old=physical_units.xfs[1]-physical_units.xfs[0] # dt before interpolation 
         
-        eCurrent=image_stats[j].xProfile/(dt_old*Constants.FS_TO_S)*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
+        eCurrent=old_div(image_stats[j].xProfile,(dt_old*Constants.FS_TO_S))*Nelectrons                        #Electron current in number of electrons per second, the original xProfile already was normalized to have a total sum of one for the all the bunches together
         
         eCOMslice=(image_stats[j].yCOMslice-image_stats[j].yCOM)*physical_units.yMeVPerPix       #Center of mass in energy for each t converted to the right units        
         eRMSslice=image_stats[j].yRMSslice*physical_units.yMeVPerPix                               #Energy dispersion for each t converted to the right units
@@ -397,17 +402,17 @@ def processLasingSingleShot(image_profile, nolasing_averaged_profiles):
     powerrawECOM=powerECOM*1e-9 
     powerrawERMS=powerERMS.copy()
     #Calculate the normalization constants to have a total energy compatible with the energy detected in the gas detector
-    eoffsetfactor=(shot_to_shot.xrayenergy-(np.sum(powerECOM[powerECOM > 0])*dt*Constants.FS_TO_S))/Nelectrons   #In J                           
+    eoffsetfactor=old_div((shot_to_shot.xrayenergy-(np.sum(powerECOM[powerECOM > 0])*dt*Constants.FS_TO_S)),Nelectrons)   #In J                           
     escalefactor=np.sum(powerERMS[powerERMS > 0])*dt*Constants.FS_TO_S                 #in J
 
     #Apply the corrections to each bunch and calculate the final energy distribution and power agreement
     for j in range(num_bunches):                 
         powerECOM[j,:]=((nolasingECOM[j,:]-lasingECOM[j,:])*Constants.E_CHARGE*1e6+eoffsetfactor)*lasingECurrent[j,:]*1e-9   #In GJ/s (GW)
-        powerERMS[j,:]=shot_to_shot.xrayenergy*powerERMS[j,:]/escalefactor*1e-9   #In GJ/s (GW) 
+        powerERMS[j,:]=old_div(shot_to_shot.xrayenergy*powerERMS[j,:],escalefactor)*1e-9   #In GJ/s (GW) 
         #Set all negative power to 0
         powerECOM[j,:][powerECOM[j,:] < 0] = 0
         powerERMS[j,:][powerERMS[j,:] < 0] = 0       
-        powerAgreement[j]=1-np.sum((powerECOM[j,:]-powerERMS[j,:])**2)/(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2))
+        powerAgreement[j]=1-old_div(np.sum((powerECOM[j,:]-powerERMS[j,:])**2),(np.sum((powerECOM[j,:]-np.mean(powerECOM[j,:]))**2)+np.sum((powerERMS[j,:]-np.mean(powerERMS[j,:]))**2)))
         eBunchCOM[j]=np.sum(powerECOM[j,:])*dt*Constants.FS_TO_S*1e9
         eBunchRMS[j]=np.sum(powerERMS[j,:])*dt*Constants.FS_TO_S*1e9
                     
@@ -442,10 +447,10 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
     mindt = np.amin([np.abs(l.xfsPerPix) for l in list_physical_units])
 
     #Obtain the number of electrons in each shot
-    num_electrons = np.array([x.dumpecharge/Constants.E_CHARGE for x in list_shot_to_shot])
+    num_electrons = np.array([old_div(x.dumpecharge,Constants.E_CHARGE) for x in list_shot_to_shot])
 
     #To be safe with the master time, we set it to have a step half the minumum step
-    dt=mindt/2
+    dt=old_div(mindt,2)
 
     #And create the master time vector in fs
     t=np.arange(mint,maxt+dt,dt)
@@ -480,12 +485,12 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
             groups = np.array([0]) 
         #for debugging. can remove without repercussions
         elif num_clusters >= num_profiles:
-            groups = np.array(range(num_profiles))
+            groups = np.array(list(range(num_profiles)))
         else: 
             groups = cu.getGroups(profilesT, num_clusters, method=method.lower())
         
         num_clusters = int(max(groups) + 1)
-        print "Averaging lasing off profiles into ", num_clusters, " groups."   
+        print("Averaging lasing off profiles into ", num_clusters, " groups.")   
 
 
     #Create the the arrays for the outputs, first index is always bunch number, and second index is group number
@@ -523,7 +528,7 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
             
             for i in range(num_in_cluster):
                 dt_old=sublist_physical_units[i].xfs[1]-sublist_physical_units[i].xfs[0] # dt before interpolation   
-                eCurrent=sublist_image_stats[i][j].xProfile/(dt_old*Constants.FS_TO_S)*num_electrons[i]                              #Electron current in electrons/s   
+                eCurrent=old_div(sublist_image_stats[i][j].xProfile,(dt_old*Constants.FS_TO_S))*num_electrons[i]                              #Electron current in electrons/s   
 
                 eCOMslice=(sublist_image_stats[i][j].yCOMslice-sublist_image_stats[i][j].yCOM)*sublist_physical_units[i].yMeVPerPix #Center of mass in energy for each t converted to the right units
                 eRMSslice=sublist_image_stats[i][j].yRMSslice*sublist_physical_units[i].yMeVPerPix                                 #Energy dispersion for each t converted to the right units
@@ -537,9 +542,9 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
                 interp=scipy.interpolate.interp1d(sublist_physical_units[i].xfs-distT[i],eRMSslice,kind='linear',fill_value=0,bounds_error=False,assume_sorted=True) #Interpolation to master time
                 averageERMSslice[j][g,:]=averageERMSslice[j][g,:]+interp(t)
 
-            averageECurrent[j][g,:] = averageECurrent[j][g,:]/num_in_cluster
-            averageECOMslice[j][g,:] = averageECOMslice[j][g,:]/num_in_cluster
-            averageERMSslice[j][g,:] = averageERMSslice[j][g,:]/num_in_cluster
+            averageECurrent[j][g,:] = old_div(averageECurrent[j][g,:],num_in_cluster)
+            averageECOMslice[j][g,:] = old_div(averageECOMslice[j][g,:],num_in_cluster)
+            averageERMSslice[j][g,:] = old_div(averageERMSslice[j][g,:],num_in_cluster)
 
     return AveragedProfiles(t, averageECurrent, averageECOMslice, 
         averageERMSslice, averageDistT, averageDistE, averageTRMS, 
@@ -549,7 +554,7 @@ def averageXTCAVProfilesGroups(list_image_profiles, num_groups=0, method='hierar
 # http://stackoverflow.com/questions/26248654/numpy-return-0-with-divide-by-zero
 def divideNoWarn(numer,denom,default):
     with np.errstate(divide='ignore', invalid='ignore'):
-        ratio=numer/denom
+        ratio=old_div(numer,denom)
         ratio[ ~ np.isfinite(ratio)]=default  # NaN/+inf/-inf 
     return ratio
 

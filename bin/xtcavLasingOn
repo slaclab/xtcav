@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+from builtins import str
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("experiment", help="psana experiment string (e.g. 'xppd7114')")
@@ -16,7 +18,7 @@ import psana
 from xtcav2.LasingOnCharacterization import *
 import numpy as np
 
-data_source = psana.DataSource("exp=%s:run=%s:%s" % (args.experiment, str(args.run), args.mode))
+data_source = psana.DataSource(("exp=%s:run=%s:%s" % (args.experiment, str(args.run), args.mode)).encode("ascii"))
 XTCAVRetrieval=LasingOnCharacterization() 
 
 n_r=0  #Counter for the total number of xtcav images processed within the run
@@ -25,11 +27,11 @@ def processImage():
     t, power = XTCAVRetrieval.xRayPower()  
     agreement = XTCAVRetrieval.reconstructionAgreement()
     pulse = XTCAVRetrieval.pulseDelay()
-    print 'Agreement: %g%%; Maximum power: %g; GW Pulse Delay: %g ' %(agreement*100,np.amax(power), pulse[0])
+    print('Agreement: %g%%; Maximum power: %g; GW Pulse Delay: %g ' %(agreement*100,np.amax(power), pulse[0]))
     
 
 if args.mode == 'idx':
-    run = data_source.runs().next()
+    run = next(data_source.runs())
     times = run.times()
     for t in times: 
         evt = run.event(t)
@@ -50,6 +52,6 @@ elif args.mode == 'smd':
             break
 
 else:
-    print "Mode not supported"
+    print("Mode not supported")
 
 
